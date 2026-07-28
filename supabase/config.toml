@@ -1,5 +1,0 @@
-project_id = "briefing-bot"
-
-[functions.briefing-job]
-# pg_cron이 x-job-secret 헤더로 인증하므로 JWT 검증 끔
-verify_jwt = false

@@ -131,32 +131,54 @@ body {
 }
 .arrival-sweep { position: fixed; inset: 0; background: var(--ds-paper); z-index: 40; }
 
+/* 로그인 카드 — 서류철 어휘 안의 종이 한 장.
+   예전엔 여기만 옛 다크 테마(#12141b · #8b8f9a · 둥근 24px)가 남아 있어서,
+   온보딩에서 넘어오면 갑자기 다른 제품처럼 보였다. */
 .login-card {
   position: relative;
   width: min(400px, 92vw);
-  text-align: center;
-  background: rgba(20, 22, 30, 0.85);
-  border: 1px solid #262933;
-  border-radius: 24px;
-  padding: 34px 30px 30px;
-  backdrop-filter: blur(10px);
-  box-shadow: 0 30px 60px -30px rgba(0, 0, 0, 0.7);
+  background: var(--ds-paper);
+  border: 1px solid var(--ds-line);
+  border-radius: 4px;
+  padding: 2.4rem 2.2rem 2rem;
+  box-shadow: var(--ds-shadow-folder);
 }
-.login-title { font-size: 26px; margin: 14px 0 6px; }
-.login-sub { color: #8b8f9a; font-size: 14px; margin: 0 0 22px; }
+.login-title {
+  font-family: var(--ds-display);
+  font-size: 1.7rem;
+  letter-spacing: 0.02em;
+  margin: 0 0 0.4rem;
+  color: var(--ds-ink);
+}
+.login-sub {
+  font-family: var(--ds-serif);
+  font-size: 0.92rem;
+  line-height: 1.6;
+  color: var(--ds-gray);
+  margin: 0 0 1.5rem;
+}
 .input {
   width: 100%;
-  background: #12141b;
-  border: 1px solid #2c3040;
-  border-radius: 14px;
-  color: #e7e9ee;
-  font-size: 16px;
-  padding: 13px 16px;
-  margin-bottom: 14px;
+  background: var(--ds-paper-2);
+  border: 1px solid var(--ds-line);
+  border-radius: 3px;
+  color: var(--ds-ink);
+  font-family: var(--ds-serif);
+  font-size: 1rem;
+  padding: 0.8rem 0.9rem;
+  margin-bottom: 0.7rem;
   outline: none;
   transition: border-color 0.15s ease;
 }
-.input:focus { border-color: #6ea8fe; }
+.input::placeholder { color: var(--ds-gray); }
+.input:focus { border-color: var(--ds-ink); }
+.login-error {
+  margin: 0.9rem 0 0;
+  font-family: var(--ds-mono);
+  font-size: 0.7rem;
+  letter-spacing: 0.04em;
+  color: var(--ds-red);
+}
 
 /* ═══ 메인 — 서류 캐비닛 (.ds 스코프) ═══ */
 
@@ -538,6 +560,110 @@ body {
   font-style: italic;
   color: var(--ds-gray);
 }
+
+/* ── 큐 (안 읽은 것) ── */
+
+/* 폴더 앞면이 버튼이 됐다 — 큐에서는 카드 전체가 누를 곳이다 */
+.fs-face-btn {
+  display: block;
+  width: 100%;
+  text-align: left;
+  appearance: none;
+  cursor: pointer;
+  font: inherit;
+  color: inherit;
+}
+.fs-face-btn:focus-visible { outline: 2px solid var(--ds-royal); outline-offset: 3px; }
+.fs-folder[data-read] .fs-face { box-shadow: none; }
+
+/* 이어 붙이기 한 줄 — 새 소식이 아니라 "전에 본 그거"라는 표시라 톤을 낮춘다 */
+.fs-thread {
+  margin: 0.7rem 0 0;
+  font-family: var(--ds-serif);
+  font-style: italic;
+  font-size: 0.9rem;
+  line-height: 1.5;
+  color: var(--ds-royal);
+}
+.fs-thread.lead { margin: 0 0 1rem; font-size: 1rem; }
+
+.fs-sheet-acts { display: flex; gap: 0.5rem; flex-shrink: 0; }
+.fs-sheet-acts .fp-close { position: static; }
+
+/* 큐가 빈 시간 — 사과하거나 채우려 들지 않는다 */
+.fs-quiet {
+  max-width: 680px;
+  margin: 3rem auto 0;
+  padding: 3.5rem 0;
+  text-align: center;
+  font-style: italic;
+  font-size: 1.05rem;
+  line-height: 1.8;
+  color: var(--ds-gray);
+  border-top: 1px solid var(--ds-line);
+  border-bottom: 1px solid var(--ds-line);
+}
+
+/* 리드 문단이 본문 전부일 때(하루 끝 한 장) 밑줄은 허공에 그어진다 */
+.fp-lead:only-child { border-bottom: 0; padding-bottom: 0; }
+
+/* ── 건너뛰기 알림 ── */
+.ds-nudge {
+  max-width: 680px;
+  margin: 0 auto 2rem;
+  padding: 1rem 1.2rem;
+  background: var(--ds-paper);
+  border: 1px solid var(--ds-ink);
+  border-radius: 3px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.7rem 1.2rem;
+}
+.ds-nudge p { margin: 0; font-size: 0.95rem; }
+.ds-nudge-acts { display: flex; gap: 0.45rem; }
+.ds-nudge-acts button {
+  appearance: none;
+  cursor: pointer;
+  background: none;
+  border: 1px solid var(--ds-line);
+  border-radius: 3px;
+  font-family: var(--ds-mono);
+  font-size: 0.68rem;
+  letter-spacing: 0.04em;
+  color: var(--ds-gray);
+  padding: 0.35rem 0.7rem;
+  transition: color 0.12s ease, border-color 0.12s ease;
+}
+.ds-nudge-acts button:hover:not(:disabled) { color: var(--ds-ink); border-color: var(--ds-ink); }
+.ds-nudge-acts button:disabled { opacity: 0.5; cursor: default; }
+
+/* ── 모듈 아카이브 (/c/[key]) ── */
+.ar-list { list-style: none; margin: 1.6rem 0 0; padding: 0; }
+.ar-row { border-bottom: 1px solid var(--ds-line); }
+.ar-head {
+  width: 100%;
+  display: flex;
+  align-items: baseline;
+  gap: 0.9rem;
+  appearance: none;
+  background: none;
+  border: 0;
+  cursor: pointer;
+  padding: 0.95rem 0;
+  font-family: var(--ds-mono);
+  font-size: 0.72rem;
+  letter-spacing: 0.05em;
+  color: var(--ds-gray);
+  text-align: left;
+}
+.ar-head:hover { color: var(--ds-ink); }
+.ar-row[data-open] .ar-head { color: var(--ds-ink); }
+.ar-when { flex: 1; }
+.ar-cost { color: var(--ds-gray); }
+.ar-badge { color: var(--ds-royal); }
+.ar-body { padding-bottom: 1.6rem; }
 
 /* ── 반응형 ── */
 @media (max-width: 920px) {

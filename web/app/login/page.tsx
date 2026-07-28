@@ -6,7 +6,7 @@ import { motion, useAnimationControls, useReducedMotion } from "motion/react";
 import { FloatingBackdrop } from "@/components/fx/FloatingBackdrop";
 import { markArrive, setUser } from "@/lib/session";
 
-/** 온보딩에서 원이 화면을 삼킨 채 도착 — 블루 오버레이가 걷히며 로그인이 드러난다. */
+/** 온보딩에서 종이가 화면을 덮은 채 도착 — 오버레이가 걷히며 로그인이 드러난다. */
 function ArrivalSweep() {
   const params = useSearchParams();
   const reduced = Boolean(useReducedMotion());
@@ -23,28 +23,50 @@ function ArrivalSweep() {
 }
 
 /**
- * 로그인(이름 게이트) — 카드가 스태거로 떠오르고, 빈 제출은 흔들리고,
- * 성공하면 카드가 오른쪽으로 샥 빠지며 메인이 이어받는다.
+ * 로그인 — 이름과 비밀번호.
+ *
+ * 이름은 인사말용이라 브라우저에만 남고, 비밀번호는 서버가 확인해 쿠키를 준다.
+ * 예전엔 이름만 받는 연출용 게이트였는데, 읽음 표시가 서버 상태를 바꾸게 되면서
+ * 실제 자물쇠가 필요해졌다. APP_PASSWORD를 안 걸어 두면 비밀번호는 그냥 통과한다.
  */
 function LoginInner() {
   const router = useRouter();
   const reduced = Boolean(useReducedMotion());
   const controls = useAnimationControls();
   const [name, setName] = useState("");
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
   const [leaving, setLeaving] = useState(false);
+
+  const shake = () =>
+    void controls.start({ x: [0, -10, 10, -7, 7, -3, 0], transition: { duration: 0.4 } });
 
   const submit = async (e: FormEvent) => {
     e.preventDefault();
-    if (leaving) return;
+    if (leaving || busy) return;
     const trimmed = name.trim();
     if (!trimmed) {
-      // 실패 피드백 — 좌우 셰이크
-      void controls.start({
-        x: [0, -10, 10, -7, 7, -3, 0],
-        transition: { duration: 0.4 },
-      });
+      setError("이름을 적어주세요.");
+      shake();
       return;
     }
+
+    setBusy(true);
+    setError(null);
+    const res = await fetch("/api/login", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ password }),
+    }).catch(() => null);
+    setBusy(false);
+
+    if (!res?.ok) {
+      setError(res?.status === 401 ? "비밀번호가 다릅니다." : "지금은 열 수 없습니다.");
+      shake();
+      return;
+    }
+
     setUser(trimmed);
     markArrive();
     if (reduced) {
@@ -68,22 +90,13 @@ function LoginInner() {
         }}
       >
         <motion.div animate={controls}>
-          <motion.div
-            className="hero-mark small"
-            initial={reduced ? false : { scale: 0, rotate: 10 }}
-            animate={{ scale: 1, rotate: 0 }}
-            transition={{ type: "spring", stiffness: 320, damping: 18, delay: 0.15 }}
-          >
-            📰
-          </motion.div>
-
           <form onSubmit={submit}>
             {[
               <h1 key="t" className="login-title">
-                브리핑 열기
+                서류철 열기
               </h1>,
               <p key="s" className="login-sub">
-                누구의 아침인가요? 이름을 남겨두면 다음부터 바로 열립니다.
+                이름은 인사말에만 쓰이고 이 브라우저에 남습니다.
               </p>,
               <input
                 key="i"
@@ -93,20 +106,30 @@ function LoginInner() {
                 onChange={(e) => setName(e.target.value)}
                 autoFocus
               />,
-              <button key="b" type="submit" className="btn-primary wide">
-                브리핑 보러 가기
+              <input
+                key="p"
+                className="input"
+                type="password"
+                placeholder="비밀번호"
+                autoComplete="current-password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+              />,
+              <button key="b" type="submit" className="btn-primary wide" disabled={busy}>
+                {busy ? "여는 중…" : "열기"}
               </button>,
             ].map((el, i) => (
               <motion.div
                 key={i}
                 initial={reduced ? false : { opacity: 0, y: 18 }}
                 animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.2 + i * 0.09, duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
+                transition={{ delay: 0.15 + i * 0.08, duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
               >
                 {el}
               </motion.div>
             ))}
           </form>
+          {error && <p className="login-error">{error}</p>}
         </motion.div>
       </motion.div>
     </main>

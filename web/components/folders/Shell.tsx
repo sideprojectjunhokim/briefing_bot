@@ -3,26 +3,30 @@
 import { ReactNode, useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import type { Briefing } from "@/lib/supabase";
-import { MODULE_ORDER } from "@/lib/modules";
-import { timeOf } from "@/lib/briefing";
+import type { SkipNudge } from "@/lib/db";
+import { MODULE_ORDER, metaOf } from "@/lib/modules";
 import { clearUser, getUser } from "@/lib/session";
 
 interface ShellProps {
-  briefings: Briefing[];
+  /** 모듈별 안 읽은 장 수 */
+  unreadByModule: Record<string, number>;
+  failures: { module_key: string; error: string | null }[];
   demo: boolean;
-  /** 현재 열려 있는 카테고리 key (메인 스택이면 null) */
+  /** 지금 열려 있는 모듈 아카이브 (홈이면 null) */
   active: string | null;
+  nudge?: SkipNudge | null;
   children: (user: string) => ReactNode;
 }
 
 /**
- * 서류 캐비닛 공통 셸 — 좌측 색인 사이드바(날짜·카테고리·생성시각·세션).
- * 이름이 없으면 온보딩으로 보낸다. children은 user 확정 후에만 렌더.
+ * 서류 캐비닛 공통 셸 — 좌측 색인 사이드바.
+ *
+ * 색인의 숫자는 "그 모듈이 오늘 몇 건이었나"가 아니라 **안 읽은 장 수**다.
+ * 이 화면에서 숫자는 언제나 "아직 남은 것"을 뜻해야 한다.
  */
-export function Shell({ briefings, demo, active, children }: ShellProps) {
+export function Shell({ unreadByModule, failures, demo, active, nudge, children }: ShellProps) {
   const router = useRouter();
-  const [user, setUserName] = useState<string | null | undefined>(undefined);
+  const [user, setUserName] = useState<string | null>(null);
 
   useEffect(() => {
     const u = getUser();
@@ -35,12 +39,6 @@ export function Shell({ briefings, demo, active, children }: ShellProps) {
 
   if (!user) return null;
 
-  const byModule = new Map(briefings.map((b) => [b.module_key, b]));
-  const failed = briefings.filter((b) => b.status === "failed");
-  const latest = briefings
-    .filter((b) => b.status === "ok")
-    .sort((a, b) => b.created_at.localeCompare(a.created_at))[0];
-
   const today = new Date().toLocaleDateString("ko-KR", {
     timeZone: "Asia/Seoul",
     month: "long",
@@ -48,7 +46,8 @@ export function Shell({ briefings, demo, active, children }: ShellProps) {
     weekday: "short",
   });
 
-  const logout = () => {
+  const logout = async () => {
+    await fetch("/api/login", { method: "DELETE" }).catch(() => {});
     clearUser();
     router.replace("/onboarding");
   };
@@ -58,32 +57,33 @@ export function Shell({ briefings, demo, active, children }: ShellProps) {
       <aside className="ds-side">
         <h1 className="ds-wordmark">
           <Link href="/">
-            Today&rsquo;s
+            Unread
             <br />
-            Briefing
+            Files
           </Link>
         </h1>
         <p className="ds-date">{today}</p>
 
-        <nav className="ds-index" aria-label="카테고리 색인">
+        <nav className="ds-index" aria-label="모듈 색인">
           <span className="ds-index-head">INDEX</span>
           {MODULE_ORDER.map((m, i) => {
-            const b = byModule.get(m.key);
+            const n = unreadByModule[m.key] ?? 0;
             return (
               <Link key={m.key} href={`/c/${m.key}`} className={active === m.key ? "on" : ""}>
                 <span className="no">{String(i + 1).padStart(2, "0")}</span>
                 <span className="nm">{m.name}</span>
-                <span className="cnt">{b && b.status === "ok" ? `${b.item_count}` : "—"}</span>
+                <span className="cnt">{n > 0 ? n : "—"}</span>
               </Link>
             );
           })}
         </nav>
 
         <div className="ds-side-foot">
-          {latest && <span>GENERATED {timeOf(latest)} KST</span>}
           {demo && <span className="ds-flag-demo">PREVIEW DATA</span>}
-          {failed.length > 0 && (
-            <span className="ds-flag-fail">FAIL: {failed.map((f) => f.module_key).join(", ")}</span>
+          {failures.length > 0 && (
+            <span className="ds-flag-fail">
+              FAIL: {failures.map((f) => metaOf(f.module_key).name).join(", ")}
+            </span>
           )}
           <span className="ds-user">
             {user}
@@ -94,7 +94,53 @@ export function Shell({ briefings, demo, active, children }: ShellProps) {
         </div>
       </aside>
 
-      <main className="ds-main">{children(user)}</main>
+      <main className="ds-main">
+        {nudge && <SkipNudgeBanner nudge={nudge} />}
+        {children(user)}
+      </main>
+    </div>
+  );
+}
+
+/**
+ * 건너뛰기 알림 — 설정 화면이 아니라 실제 행동에서 배운다.
+ * 조용히 줄이지 않고 한 번 물어본다. 답하면(그대로 두기 포함) 2주 동안 안 묻는다.
+ */
+function SkipNudgeBanner({ nudge }: { nudge: SkipNudge }) {
+  const router = useRouter();
+  const [busy, setBusy] = useState(false);
+  const [gone, setGone] = useState(false);
+  if (gone) return null;
+
+  const answer = async (a: "reduce" | "mute" | "keep") => {
+    if (busy) return;
+    setBusy(true);
+    await fetch("/api/prefs", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ module: nudge.module_key, answer: a }),
+    }).catch(() => {});
+    setGone(true);
+    router.refresh();
+  };
+
+  const name = metaOf(nudge.module_key).name;
+  return (
+    <div className="ds-nudge" role="status">
+      <p>
+        최근 {name} {nudge.total}장 중 {nudge.skipped}장을 안 읽고 넘겼어요. 줄일까요?
+      </p>
+      <div className="ds-nudge-acts">
+        <button onClick={() => answer("reduce")} disabled={busy}>
+          줄이기
+        </button>
+        <button onClick={() => answer("mute")} disabled={busy}>
+          그만 받기
+        </button>
+        <button onClick={() => answer("keep")} disabled={busy}>
+          그대로
+        </button>
+      </div>
     </div>
   );
 }

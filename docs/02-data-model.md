@@ -1,56 +1,60 @@
 # 02. 데이터 모델
 
+> **07-28 개정:** RLS 절이 통째로 사라졌다. Supabase에서 Neon으로 옮기면서 웹이 DB를 직접 읽지 않고(서버에서만 붙는다) anon 키라는 개념 자체가 없어졌기 때문이다.
+> 실제 SQL은 `db/schema.sql`이 정본이고, 이 문서는 **왜 이런 모양인지**를 적는다.
+
 ## 설계 원칙
 
-- **웹 버전(07-15 피벗):** 배송이 없어져 `subscribers`(chat_id) 테이블은 **삭제.** v1은 단일 사용자라 모듈 on/off·정렬은 웹 localStorage로 충분. 다중 사용자 공개 시 Supabase Auth + `preferences` 테이블로 승격(확장 예약).
-- 모듈 목록·소스 설정은 v1에서 **코드 상수**로 관리(테이블 아님). 니치 모듈이 잦아지면 테이블 승격.
-- 마이그레이션은 `supabase/migrations/*.sql`, `supabase db push`로 적용. 런타임 DDL 금지(goldsilver 교훈).
+- **축은 `briefings.read_at` 하나다(C-13).** 읽기 단위가 "안 읽은 것" 전부라서, 큐에 있다/없다를 정하는 게 이 컬럼과 `archived_at` 둘뿐이다.
+- 모듈 목록·소스 설정은 **코드 상수**(테이블 아님). 다만 "얼마나 받을지"는 행동에서 배우므로 `module_prefs`만 데이터로 뺐다.
+- 마이그레이션 도구는 없다. `db/schema.sql` 하나가 전부이고 전부 idempotent하다(`create table if not exists`, `add column if not exists`). 런타임 DDL 금지.
+- **한 장 = briefings 한 행.** "한 회차 수집에서 한 모듈이 건진 것 묶음"이 화면의 종이 한 장이다.
 
-## 테이블 (2개)
+## 테이블 (3개)
 
-### source_items — 수집 아이템 (중복제거의 SSOT)
-```sql
-create table source_items (
-  id           bigint generated always as identity primary key,
-  module_key   text not null,                      -- 'hotdeal' | 'market' | 'technews' | 'community'
-  external_id  text not null,                      -- 원천 고유 ID (URL 해시 또는 게시글 ID)
-  url          text,
-  title        text,
-  payload      jsonb not null default '{}',        -- 가격·추천수 등 모듈별 원시 데이터
-  collected_at timestamptz not null default now(),
-  unique (module_key, external_id)
-);
-create index on source_items (module_key, collected_at desc);
-```
-- upsert 시 conflict가 나면 "이미 본 아이템" → 브리핑에서 제외. 이것이 중복제거 전부다.
-- 보존 14일. 정리는 pg_cron 별도 잡(`delete where collected_at < now() - interval '14 days'`).
-- market 모듈처럼 "스냅샷"성 데이터는 external_id를 `KRW-BTC:2026-07-15`처럼 날짜 포함으로 만들어 하루 1회만 수집되게 한다.
+### briefings — 종이 한 장 (표시 SSOT)
 
-### briefings — 브리핑 결과 (웹 표시 SSOT + 관측 + 비용 가드)
-```sql
-create table briefings (
-  id          bigint generated always as identity primary key,
-  module_key  text not null,                       -- 'hotdeal' | 'market' | 'technews' | 'community'
-  item_count  int not null default 0,
-  content     text,                                -- 웹에 렌더할 본문 (HTML 또는 마크다운)
-  status      text not null default 'ok',          -- 'ok' | 'failed' | 'skipped_empty'
-  error       text,
-  created_at  timestamptz not null default now()
-);
-create index on briefings (module_key, created_at desc);
-```
-- **웹 표시:** 모듈별 `created_at desc` 최신 1행을 카드로 렌더. status='ok'만 카드로, 'failed'는 상단 배너로 노출.
-- **비용 가드:** briefing-job 시작 시 "오늘 이 모듈 ok 행 수 ≥ N(기본 3)"이면 중단. 루프 버그로 인한 LLM 과금 폭주 방지.
+큐 조회는 `status='ok' and read_at is null and archived_at is null`, 시간 역순. 이 한 줄이 홈이 때리는 유일한 쿼리이고 전용 부분 인덱스가 붙어 있다.
 
-## RLS
+| 컬럼 | 왜 있나 |
+|---|---|
+| `module_key` | 'hotdeal' \| 'market' \| 'technews' \| 'community' \| 'wrap' |
+| `kind` | `live`(수집분) \| `wrap`(하루 끝 한 장) |
+| `content` | 리드 문단 + 마크다운 불릿. **목록은 데이터고 리드가 상품이다** |
+| `item_count` | 이 장에 담긴 항목 수 |
+| `status` / `error` | `ok` \| `failed` \| `skipped_empty`. 큐는 `ok`만 본다 |
+| `est_read_seconds` | **읽는 시간(#2).** 코드가 글자 수로 계산 — LLM 안 씀 |
+| `thread_of` / `thread_note` | **이어 붙이기(#1).** 이 장이 예전에 읽은 어느 장의 후속인지 + 건네는 한 문장 |
+| `read_at` | **축.** 읽었다 → 큐에서 빠짐 |
+| `archived_at` | 3일 넘게 안 읽음 → 큐에서 내림(지우진 않음) |
+| `resurfaced_at` | **아카이브 재출고(#3).** non-null이면 화면이 "N일 전 것"이라 밝힌다 |
 
-- 쓰기는 Edge Function(service role)만 — RLS 우회하므로 기능 영향 없음.
-- **웹이 anon 키로 읽으므로** `briefings`에만 `for select to anon using (true)` 정책 1개(공개 정보라 안전). `insert/update/delete` 정책은 없음 → anon 쓰기 전면 차단.
-- `source_items`는 정책 0개(= anon 전면 차단). 웹은 이 테이블을 읽지 않는다.
-- 두 테이블 모두 `enable row level security`. Supabase advisor 경고 안 뜨게.
+**왜 `archived_at`이 필요한가.** 시계가 매시라 안 내리면 큐가 무한히 자란다. 그러면 이건 읽을거리가 아니라 밀린 숙제가 되고, 밀린 숙제는 안 연다. 사흘 지난 소식은 어차피 소식도 아니다.
+
+**빈 회차에 행을 만들지 않는다.** 예전엔 `skipped_empty`를 남겼는데, 하루 1회일 때는 "오늘 새 소식 없음" 카드가 의미였다. 매시로 바뀐 지금은 하루 96행의 잡음일 뿐이다. 없으면 없는 것이고 화면이 "안 읽은 것 0개"라고 말한다.
+
+### source_items — 수집 아이템 (중복제거 SSOT)
+
+- `unique (module_key, external_id)` — upsert 충돌이 곧 "이미 본 것"이다. 중복제거는 이게 전부다.
+- `external_id`는 `<origin>:<id>` 꼴. 사이트 간 게시글 번호 겹침 방지.
+- `briefing_id` — **이어 붙이기의 경로.** 이 아이템이 실린 장을 가리킨다. null이면 수집만 되고 선별에서 떨어진 것. "읽은 장에 뭐가 들어 있었나"를 되짚을 때 이 링크를 탄다.
+- market처럼 스냅샷성 데이터는 `external_id`에 날짜를 넣어(`upbit:KRW-BTC:2026-07-28`) 하루 1회만 쌓이게 한다.
+- 보존 정책은 아직 없다. 이어 붙이기가 7일을 되짚으므로 최소 그 이상 남겨야 한다.
+
+### module_prefs — 행동에서 배운 것 (#4)
+
+설정 화면이 아니다. 수집기가 아니라 **화면이** 쓴다.
+
+| 컬럼 | 뜻 |
+|---|---|
+| `pick_max` | LLM이 한 장에 담을 수 있는 항목 상한 (기본 8, 줄이면 3) |
+| `muted` | true면 수집 자체를 건너뜀 |
+| `nudged_at` | 마지막으로 물어보고 **답을 받은** 시각. 2주 동안 다시 안 묻는다 |
+
+판정: 최근 14일 중 `archived_at`이 찍혔는데 `read_at`이 null인 비율(= 끝내 안 읽고 흘려보낸 비율)이 70% 이상이고 표본이 6장 이상이면 물어본다. **조용히 줄이지 않는다** — 자동으로 깎으면 왜 덜 오는지 본인도 모르게 된다.
 
 ## 확장 예약 (지금 안 만듦)
 
-- `preferences` + Supabase Auth — 다중 사용자 공개 시 모듈 on/off를 서버 상태로(현재 localStorage).
-- `module_configs` — 니치 모듈 3개↑면 소스 URL·활성·프롬프트를 데이터로.
-- `watchlists` — market 개인화(사용자별 관심 종목/코인).
+- `users` + 진짜 인증 — 지금은 비밀번호 하나짜리 쿠키 게이트다. 다중 사용자로 열 때 승격.
+- `module_configs` — 니치 모듈이 3개 넘으면 소스 URL·활성·프롬프트를 데이터로.
+- `source_items` 보존 정리 잡 — 행이 실제로 부담될 때.

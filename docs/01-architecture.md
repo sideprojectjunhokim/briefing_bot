@@ -1,98 +1,111 @@
-# 01. 아키텍처 (웹 버전)
+# 01. 아키텍처
 
-> **07-15 피벗:** 배송 채널을 텔레그램 봇 → **웹 대시보드**로 변경(C-2 개정, 06 문서 Deviation). 봇 토큰·웹훅·메시지 길이제한·채널별 포맷이 전부 사라져 오히려 단순해짐. "briefing-job이 DB에 쌓고 → 웹이 읽어 카드로 표시" 두 조각이 전부.
+> **07-28 개정:** 용도가 "매일 아침 1회 브리핑"에서 **"일하는 중에 한 시간마다 읽을거리 하나"**로 바뀌었다.
+> 그에 따라 (1) 시계가 pg_cron → GitHub Actions, (2) DB가 Supabase → Neon, (3) 수집 코드가 Deno Edge Function → Next.js route handler로 옮겨졌다.
+> `supabase/` 아래 코드는 배포된 적도 실행된 적도 없이 폐기됐다.
 
 ## 한 장 요약
 
 ```
-   pg_cron ──(pg_net http_post)──▶  Edge Function  briefing-job
-   (매일 아침)                        - 모듈별 수집 → 중복제거 → 요약 → briefings 저장
-                                     - 발송(sendMessage) 없음. DB에 쓰고 끝.
-                          ┌──────────┴───────────┐
-                    외부 소스 fetch          Claude Haiku API
-                 (RSS·공개 API·HTML)          (요약 생성)
-
-   ┌─────────────────────────────────────────────────────────┐
-   │  Supabase Postgres                                        │
-   │   - source_items(중복제거) / briefings(표시 SSOT)          │
-   │   - pg_cron + pg_net                                       │
-   │   - RLS: briefings 는 anon SELECT 허용(공개 정보), 쓰기 차단 │
-   └───────────────────────────┬─────────────────────────────┘
-                               │ supabase-js (anon key, 읽기 전용)
-                               ▼
-   ┌─────────────────────────────────────────────────────────┐
-   │  Next.js on Vercel  (정적/ISR — 상시 프로세스 0개)          │
-   │   - 모듈별 최신 브리핑 카드 렌더                             │
-   │   - 모듈 on/off 토글(localStorage, 단일 사용자)             │
-   │   - "새로고침" = DB 재조회                                  │
-   └─────────────────────────────────────────────────────────┘
-                               ▼
-                        내 브라우저/폰 (페이지 열어 봄)
+   GitHub Actions (cron: 매시)          ← 시계. 저장소가 이미 여기 있다
+        │  POST /api/collect
+        │  authorization: Bearer CRON_SECRET
+        ▼
+   Vercel — Next.js
+   ┌──────────────────────────────────────────────┐
+   │  /api/collect   수집 → 중복제거 → 선별 → 저장  │
+   │  /api/read      읽음 표시 (큐에서 빼기)        │
+   │  /api/prefs     건너뛰기 알림에 대한 답        │
+   │  /api/login     비밀번호 게이트                │
+   │  /  ·  /c/[key] 화면 (전부 force-dynamic)      │
+   └───────────┬──────────────────┬───────────────┘
+      외부 소스 fetch        Claude Haiku
+     (RSS·공개 API·HTML)     (리드 문단 + 선별)
+               │
+               ▼
+   ┌──────────────────────────────────────────────┐
+   │  Neon Postgres (무료, 개인 계정)               │
+   │   briefings     — 종이 한 장. read_at가 축     │
+   │   source_items  — 중복제거 SSOT                │
+   │   module_prefs  — 행동에서 배운 것             │
+   └──────────────────────────────────────────────┘
+                       ▼
+               내 브라우저 (읽으러 온다)
 ```
 
-서버는 여전히 0개. cron 발화 시에만 깨어나는 Edge Function 1개 + Vercel의 정적/서버리스 렌더뿐.
+서버는 여전히 0개. cron 발화 때만 깨는 Actions 러너 하나 + Vercel의 서버리스 렌더뿐이다.
+
+## 왜 이 조합인가 (다른 걸 못 쓴 이유)
+
+| 후보 | 왜 안 되나 |
+|---|---|
+| Supabase | 무료 활성 프로젝트가 계정당 2개인데 CAS·금은마켓이 이미 다 씀. 신규 생성 불가 |
+| Vercel Cron | Hobby는 **하루 1회가 상한**(프로젝트당 100개, 최소 주기 1일, 정확도 ±59분). 시간당은 Pro($20/월)부터 |
+| Cloudflare | 계정이 회사 것(금은마켓 앱이 R2를 씀). 사이드 프로젝트를 회사 계정에 얹지 않는다 |
+| **GitHub Actions** | **채택.** 비공개 저장소 월 2,000분, 매시면 월 ~720분. 저장소가 이미 여기 있어 새 계정이 안 는다 |
+
+CAS 프로젝트에 스키마만 얹는 방법은 쓰지 않는다 — CAS는 곧 결제와 출생 개인정보가 들어가고, 사이드 프로젝트 cron이 커넥션을 물면 그쪽이 멈춘다.
 
 ## 컴포넌트
 
-### Edge Function `briefing-job` (유일한 함수)
-- pg_cron → pg_net `http_post`로 호출되는 배치 잡. **텔레그램 웹훅 함수는 없음.**
-- 파이프라인: **모듈 선택 → 수집(fetch) → 중복제거(source_items) → 요약(Haiku) → briefings INSERT**. 발송 단계가 없다.
-- body `{ "module": "technews" }`로 특정 모듈만 실행(모듈별 cron 분리 + 수동 테스트).
-- 보안: 헤더 `x-job-secret`(Supabase secret) 검증. `--no-verify-jwt`로 배포.
+### 시계 — `.github/workflows/collect.yml`
+- `cron: "0 * * * *"` + `workflow_dispatch`(모듈 지정 가능). 하는 일은 curl 한 번이 전부다.
+- **정시에 안 돈다.** GitHub 부하에 따라 5~20분 밀린다. "정각"을 전제로 설계하지 않는다.
+- **저장소가 60일 무활동이면 스케줄이 자동 비활성화된다.** 혼자 쓰는 저장소라 실제로 걸릴 수 있고, Actions 탭에서 다시 켜면 된다.
 
-### 웹 프런트 (Next.js / Vercel)
-- **읽기 전용.** supabase-js anon 클라이언트로 `briefings`에서 모듈별 최신 행을 조회해 카드로 렌더.
-- 모듈 on/off·정렬은 **localStorage**(단일 사용자라 서버 상태 불필요). 다중 사용자 공개 시 Supabase Auth + preferences 테이블로 승격.
-- "새로고침" 버튼 = DB 재조회(수집 재실행 아님). 수집은 cron이 담당. 온디맨드 수집은 백로그(보호된 트리거 필요).
-- ISR/revalidate로 캐시 — 매 방문마다 최신 briefings 반영.
+### 수집 — `web/lib/collect/*` + `/api/collect`
+- 파이프라인: **묵은 미독 내리기 → 소스 fetch → 중복제거 → 선별·리드 생성 → 저장**.
+- **그 시간에 건질 게 없으면 아무것도 안 쌓는다.** 예전 설계는 빈 회차마다 `skipped_empty` 행을 남겼는데, 매시면 하루 96행이고 큐에 잡음만 는다.
+- 실패는 행으로 남기되 **같은 실패는 하나만** 세워 둔다(매시 같은 실패 행을 쌓지 않는다).
+- 격리 2중: 모듈별 try/catch + 소스별 try/catch.
+- 비용 가드: 모듈당 24시간 내 `ok` 행 24개가 상한(매시 = 정상 상한).
 
-### Postgres (스키마는 02 문서)
-- `pg_cron`: 스케줄. **UTC 기준** → 08:00 KST = `0 23 * * *`.
-- `pg_net`: cron → Edge Function 비동기 HTTP 호출.
-- 데이터: `source_items`(중복제거), `briefings`(웹 표시 SSOT).
+### 화면 — Next.js
+- `/` = **안 읽은 큐**. `/c/[key]` = 모듈 하나의 지난 장들.
+- 둘 다 `force-dynamic`. 읽음 상태가 매번 달라져서 ISR 캐시를 쓰면 방금 읽은 게 다시 올라온다.
+- 접근은 `APP_PASSWORD` 쿠키 게이트(`web/middleware.ts`). 읽음 표시가 서버 상태를 바꾸므로 필요해졌다.
 
 ### 외부 의존
 | 대상 | 용도 | 인증 |
-|------|------|------|
-| Claude Haiku (`claude-haiku-4-5`) | 수집 아이템 요약 | ANTHROPIC_API_KEY |
-| 각 소스 사이트 (03 문서) | RSS/API/HTML 수집 | 없음 (공개) |
-| Vercel | 웹 호스팅(정적/ISR) | — |
-
-Telegram·Kakao 등 채널 의존이 **전부 사라짐.**
+|---|---|---|
+| Claude Haiku (`claude-haiku-4-5`) | 선별 + 리드 문단 | `ANTHROPIC_API_KEY` |
+| 각 소스 사이트 (03 문서) | RSS/API/HTML | 없음 (공개) |
+| Neon | Postgres | `DATABASE_URL` |
+| Vercel | 웹 + 수집 실행 | — |
+| GitHub Actions | 시계 | `CRON_SECRET`, `BASE_URL` (repo secrets) |
 
 ### Secrets
-- Edge Function(Supabase): `ANTHROPIC_API_KEY`, `JOB_SECRET`
-- 웹(Vercel env): `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY` (anon은 공개돼도 RLS로 안전)
-- 에러 알림: v1은 briefings.status=failed 행으로 남기고 웹 상단 배너로 표시(별도 채널 없음). 이메일 알림 붙이려면 백로그.
+- **Vercel env:** `DATABASE_URL`, `ANTHROPIC_API_KEY`, `CRON_SECRET`, `APP_PASSWORD`
+- **GitHub repo secrets:** `BASE_URL`, `CRON_SECRET`
+- `NEXT_PUBLIC_*`는 하나도 없다. 전부 서버 전용 값이다.
 
 ## 데이터 흐름
 
-**수집(아침, 자동):**
-1. pg_cron 발화(모듈별 잡) → pg_net이 briefing-job POST.
-2. `fetchItems()` → source_items upsert(conflict=이미 봄 → 제외) → 신규만.
-3. 신규 0개면 briefings에 `skipped_empty` 기록하고 끝.
-4. 신규를 Haiku에 1회 요약 → briefings INSERT(module_key, content, item_count).
+**수집(매시, 자동)**
+1. Actions가 `/api/collect`를 POST.
+2. 3일 넘게 안 읽힌 장을 `archived_at`으로 큐에서 내린다.
+3. 모듈별로 소스 fetch → `source_items` upsert(충돌 = 이미 봄) → 신규만 남긴다.
+4. 신규 0개면 **아무것도 안 만들고 넘어간다.**
+5. 신규가 있으면 Haiku 1회 호출 → 리드 + 항목. 모델이 `SKIP`이라고 하면 그것도 안 만든다.
+6. 18시대(KST)에 오늘 **읽은** 장이 있으면 하루 끝 한 장(`kind='wrap'`)을 만든다.
+7. 이번에 만든 것도 없고 큐도 비었으면 아카이브에서 한 장을 되꺼낸다(`resurfaced_at`).
 
-**표시(아무 때나, 수동):**
-5. 웹 접속 → supabase-js가 모듈별 최신 briefings 조회 → 카드 렌더.
-
-## 왜 웹이 (봇 대비) 이득인가
-- 봇 토큰·웹훅·secret_token·4096자 분할·HTML 이스케이프·채널 OAuth **전부 제거** → 코드·운영 표면 축소.
-- 포맷 자유도 ↑(카드·이미지·차트 나중에 쉽게). 히스토리 열람도 페이지네이션으로 자연스러움.
-- 트레이드오프: 푸시가 없어 페이지를 열어야 함 → 필요해지면 **PWA Web Push**로 보완(백로그, 서버 0개 유지 가능).
+**표시(아무 때나)**
+8. 홈 접속 → 안 읽은 것 전부를 시간 역순으로 → 열면 `/api/read`가 `read_at`을 찍는다.
 
 ## 제약·리스크
 
 | 리스크 | 내용 | 대응 |
-|--------|------|------|
-| 푸시 없음 | 열어야 봄 | v1 수용, PWA push 백로그 |
-| Edge Function 실행시간 | 소스 다 돌리면 타임아웃 | cron 모듈별 분리, 소스별 격리 |
-| 스크래핑 차단 | HTML 소스 차단 | 소스별 try/catch, enabled=false로 차단 |
-| 소스 포맷 변경 | 파서 깨짐 | 모듈·소스 2중 격리 + briefings.failed 표시 |
-| anon 키 노출 | 웹에 anon 키 포함 | RLS로 briefings 읽기만 허용, 쓰기·타 테이블 차단 |
-| LLM 비용 폭주 | 루프 버그 | 모듈당 1일 호출 수 가드(briefings 로그) |
+|---|---|---|
+| 스케줄 지연 | Actions가 5~20분 밀림 | 정각 전제 없음. wrap도 "18시대"로 판정 |
+| 60일 무활동 비활성화 | 혼자 쓰는 저장소 | Actions 탭에서 재활성. 걱정되면 주 1회 빈 커밋 |
+| Vercel 함수 60초 | 소스 넷 × (fetch + LLM) | `maxDuration=60`, RSS fetch 12초 타임아웃 |
+| 스크래핑 차단 | HTML 소스 | 소스별 격리, 막히면 `enabled=false` |
+| LLM 비용 | 호출이 하루 1회 → 24회 | 모듈당 24회/일 가드 + `maxInput`으로 입력 상한 고정 |
+| 큐 무한 증식 | 안 읽으면 계속 쌓임 | 3일 뒤 자동 아카이브 — 읽을거리가 밀린 숙제가 되면 안 연다 |
+| 접근 통제 | 읽음 표시가 서버 상태 변경 | `APP_PASSWORD` 쿠키 게이트 |
 
 ## 저장소·배포
-- GitHub private repo `briefing-bot`: `/web`(Next.js) + `/supabase`(migrations, functions) 모노레포 한 개.
-- Supabase **신규** 프로젝트(goldsilver와 분리). Vercel 프로젝트도 신규.
-- 배포: `supabase db push` + `supabase functions deploy briefing-job` + Vercel는 GitHub 연동 자동배포.
+- GitHub private repo `sideprojectjunhokim/briefing_bot`: `/web`(Next.js) + `/db`(schema.sql) + `/docs`.
+- Vercel: Root Directory = `web`, GitHub 연동 자동배포.
+- 스키마: `cd web && npm run db:push` (`db/schema.sql`은 전부 idempotent).

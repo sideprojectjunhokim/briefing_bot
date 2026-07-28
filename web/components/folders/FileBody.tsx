@@ -1,13 +1,13 @@
 "use client";
 
-import type { Briefing } from "@/lib/supabase";
+import type { Briefing } from "@/lib/db";
 import type { ModuleMeta } from "@/lib/modules";
 import { parseItems, parseLead, toMarketRows } from "@/lib/briefing";
 
 /**
  * 브리핑 본문 — 항목 리스트(또는 시세 그리드).
  *
- * 메인에서 폴더를 펼쳤을 때와 /c/[key] 전체 페이지가 **같은 것을 보여줘야** 한다.
+ * 큐에서 펼쳤을 때와 /c/[key] 아카이브가 **같은 것을 보여줘야** 한다.
  * 두 곳에 복사해 두면 한쪽만 고쳐지고, 그때부터 "펼친 것"과 "연 것"이 서로
  * 다른 화면이 된다.
  */
@@ -18,8 +18,12 @@ export function FileBody({ briefing, meta }: { briefing: Briefing | null; meta: 
   if (briefing?.status === "failed") {
     return <p className="fp-empty">수집에 실패했어요 — {briefing.error ?? "원인 미상"}</p>;
   }
+  // 하루 끝 한 장은 불릿이 없다 — 문단이 전부다
+  if (items.length === 0 && lead) {
+    return <p className="fp-lead">{lead}</p>;
+  }
   if (items.length === 0) {
-    return <p className="fp-empty">오늘은 새 소식이 없어요. 내일 아침 다시 채워둘게요.</p>;
+    return <p className="fp-empty">본문이 비어 있어요.</p>;
   }
 
   if (meta.key === "market") {

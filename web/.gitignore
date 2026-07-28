@@ -1,0 +1,5 @@
+.vercel
+.env*
+
+# 타입체크 캐시 — 산출물이라 커밋하지 않는다
+tsconfig.tsbuildinfo

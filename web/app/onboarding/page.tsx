@@ -1,24 +1,21 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { motion, useReducedMotion } from "motion/react";
 import { FloatingBackdrop } from "@/components/fx/FloatingBackdrop";
-import { getUser } from "@/lib/session";
 
 /**
- * 온보딩 — 떠다니는 배경 위 히어로. "시작하기"를 누르면 콘텐츠가 가라앉으며
- * 브랜드 블루 원이 화면을 삼키고(슈루룩) 로그인으로 넘어간다.
+ * 온보딩 — 떠다니는 배경 위 히어로. 누르면 콘텐츠가 가라앉으며 종이가 화면을
+ * 덮고 로그인으로 넘어간다.
+ *
+ * 예전엔 "이름이 이미 있으면 건너뛰기"가 있었는데, 쿠키는 없고 이름만 남은
+ * 상태에서 홈 → 미들웨어 → 온보딩 → 홈으로 무한히 돈다. 자동 이동을 뺐다.
  */
 export default function OnboardingPage() {
   const router = useRouter();
   const reduced = Boolean(useReducedMotion());
   const [leaving, setLeaving] = useState(false);
-
-  // 이미 이름이 있으면 온보딩 생략
-  useEffect(() => {
-    if (getUser()) router.replace("/");
-  }, [router]);
 
   const start = () => {
     if (leaving) return;
@@ -46,20 +43,20 @@ export default function OnboardingPage() {
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1] }}
         >
-          TODAY&apos;S
+          UNREAD
           <br />
-          BRIEFING
+          FILES
         </motion.p>
 
         {[
           <h1 key="t" className="hero-title">
-            밤사이 쌓인 것들을,
+            일하다 쉴 때,
             <br />
-            <em>아침에 한 번</em>.
+            <em>안 읽은 것만</em>.
           </h1>,
           <p key="s" className="hero-sub">
-            핫딜 · 시세 · 테크 뉴스 · 커뮤니티를 새벽에 모아 두고, 무엇이 달라졌는지
-            한 문단으로 먼저 알려드립니다. 목록은 그 다음입니다.
+            핫딜 · 시세 · 테크 뉴스 · 커뮤니티를 매시 살펴보고, 건질 게 있을 때만
+            한 장씩 놓아둡니다. 없는 시간엔 아무것도 놓지 않습니다.
           </p>,
           <button key="b" className="btn-primary" onClick={start}>
             서류철 열기

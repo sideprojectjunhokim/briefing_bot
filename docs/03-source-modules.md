@@ -8,8 +8,10 @@
 - **Module** = 브리핑 섹션(=메시지) 1개. 여러 Source를 모아 origin 태그를 달고, 합쳐서 요약/렌더한다.
 - 소스 추가 = Source 객체 1개 추가 + 모듈의 `sources` 배열에 1줄. **인터페이스 변경 없이 커버리지 확장.**
 
+> **07-28 경로 이동:** 코드가 `supabase/functions/_shared/` → **`web/lib/collect/`**로 옮겨졌다(Deno Edge Function → Next.js). 2계층 구조 자체는 그대로다.
+
 ```ts
-// supabase/functions/_shared/modules/types.ts
+// web/lib/collect/types.ts
 export interface RawItem {
   externalId: string;          // source_items.external_id 로 들어감 (중복제거 키)
   url?: string;
@@ -27,30 +29,41 @@ export interface Source {
 
 export interface SourceModule {
   key: string;                 // 'community' 등. DB의 module_key와 일치
-  label: string;               // 메시지 헤더용 한글 이름 ("💬 커뮤니티 인기글")
+  label: string;               // 화면 표시용 한글 이름
   sources: Source[];           // 1개 이상. 모듈이 순회하며 fetch, source별 try/catch로 격리
 
-  // 요약 방식: 'llm'이면 Haiku 호출, 'template'이면 코드로 문자열 조립
   render:
-    | { mode: "llm"; systemPrompt: string; maxItems: number }
+    // prompt는 문자열이 아니라 함수다 — pick_max(module_prefs)와 최근 읽은 것
+    // (이어 붙이기 재료)이 매 회차 달라지기 때문
+    | { mode: "llm"; maxInput: number; prompt(ctx: PromptContext): string }
     | { mode: "template"; format(items: RawItem[]): string };
+}
+
+export interface PromptContext {
+  pickMax: number;             // 이 장에 담을 항목 상한
+  recentlyRead: ReadRef[];     // 최근 7일 안에 **읽은** 장과 그 안의 제목들
 }
 ```
 
-- 등록은 `_shared/modules/index.ts`의 배열 하나: `export const MODULES: SourceModule[] = [hotdeal, market, technews, community];`
-- briefing-job은 MODULES를 순회 → 각 모듈은 `sources`를 순회. **모듈별 try/catch(모듈 격리) + 소스별 try/catch(소스 격리)** 2중. 커뮤니티 소스 하나가 차단돼도 그 모듈의 다른 소스·다른 모듈 전부 정상.
-- external_id 충돌 방지: `source_items.external_id`는 `origin` 접두사를 붙인다(`clien:12345`) — 사이트 간 게시글 번호 겹침 방지.
+- 등록은 `web/lib/collect/modules/index.ts`의 배열 하나: `export const MODULES: SourceModule[] = [technews, market, hotdeal, community];`
+- 수집기는 MODULES를 순회 → 각 모듈은 `sources`를 순회. **모듈별 try/catch(모듈 격리) + 소스별 try/catch(소스 격리)** 2중. 커뮤니티 소스 하나가 차단돼도 그 모듈의 다른 소스·다른 모듈 전부 정상.
+- external_id 충돌 방지: `source_items.external_id`는 `origin` 접두사를 붙인다(`clien:12345`).
 
-## 파이프라인 (briefing-job 내부, 모듈 공통)
+## 파이프라인 (`web/lib/collect/run.ts`, 모듈 공통)
 
 ```
-fetchItems()
+묵은 미독 내리기(archived_at)
+  → 소스별 fetch (격리)
   → source_items upsert (conflict = 이미 봄 → 제외)
-  → 신규 0개면 skipped_empty 기록하고 끝
-  → render.mode === 'llm'  → Haiku 1회 호출로 섹션 본문 생성
+  → 신규 0개면 **아무것도 안 만들고 끝**   ← 예전엔 skipped_empty 행을 남겼다
+  → render.mode === 'llm'  → Haiku 1회 호출 (선별 + 리드 + THREAD 줄)
     render.mode === 'template' → format() 호출
-  → 구독자별 sendMessage → briefings 기록
+  → 모델이 SKIP이라 하면 역시 **아무것도 안 만든다**
+  → briefings INSERT (+ est_read_seconds 계산, thread_of 검증)
+  → source_items.briefing_id 연결
 ```
+
+마지막 줄이 중요하다. `briefing_id` 연결이 있어야 나중에 "읽은 장에 뭐가 들어 있었나"를 되짚어 **이어 붙이기** 재료를 만들 수 있다.
 
 ## v1 모듈 스펙
 
@@ -91,10 +104,25 @@ fetchItems()
 
 ## 요약(LLM) 공통 규칙
 
-- 모델: `claude-haiku-4-5`, 모듈당 **1일 1회 호출** (아이템별 호출 금지).
-- 입력: 신규 아이템의 title+payload를 JSON으로 넘김. `maxItems`(기본 30)로 잘라 토큰 상한 고정.
-- 출력: 텔레그램 HTML(04 문서 포맷)로 바로 쓸 수 있는 본문. 프롬프트에 포맷 예시 포함.
-- 예상 비용: 모듈 3개(llm) × 일 1회 호출. 소스가 늘어도 **호출 수는 모듈당 1회 고정**(통합 후 1번), `maxItems`가 입력 토큰 상한을 잡아 소스 증가와 비용이 무관 ≈ **월 $1 미만 유지.**
+- 모델: `claude-haiku-4-5`, **장 하나당 1회 호출** (아이템별 호출 금지).
+- 입력: 신규 아이템의 title+payload를 JSON으로. `maxInput`(기본 30)으로 잘라 토큰 상한 고정.
+- 출력: 화면 렌더용 마크다운. 선택적으로 첫 줄에 `THREAD: <id> | <한 문장>`.
+- 비용: 시계가 매시로 바뀌어 호출 수가 하루 1회 시절의 최대 24배가 됐다. 다만 **건질 게 없으면 호출 자체를 안 하므로**(신규 0개면 LLM 안 부름) 실제 호출 수는 소스가 실제로 갱신되는 빈도에 붙는다. 모듈당 24회/일 가드가 상한.
+
+### 프롬프트 조립 — `web/lib/collect/prompt.ts`
+
+모듈 파일은 **자기 모듈만의 것**(역할 한 줄, 리드가 답할 질문, 항목 형식, 제외 규칙)만 쓴다. 공통 뼈대(선별 지시·SKIP 규칙·출력 2부 구성·이어 붙이기 지시)는 `buildPrompt()`가 붙인다.
+
+**`LEAD_ASK`는 넷을 한곳에 나란히 둔다(C-18).**
+
+| 모듈 | 리드가 답해야 하는 질문 |
+|---|---|
+| hotdeal | 지금 사도 되는가 |
+| market | 왜 움직였나 |
+| technews | 내 코드가 어떻게 바뀌나 |
+| community | 읽을 값어치가 있나 |
+
+흩어 놓으면 하나씩 고칠 때마다 조금씩 닮아 가고, 다 닮은 뒤에도 아무도 눈치 못 챈다. 새 모듈을 추가할 땐 여기 한 줄을 쓰면서 "옆칸과 다른 질문인가"를 먼저 본다.
 
 ## 니치 모듈 확장 시나리오 (지금 안 만듦)
 

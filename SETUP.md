@@ -1,71 +1,90 @@
-# SETUP — 스캐폴딩 → 배포 (Phase 0~2)
+# SETUP — 계정 채우고 배포하기
 
-> 코드 골격은 다 짜여 있음. 아래는 **계정/키를 채워 배포**하는 순서. 각 단계 끝에 검증 방법 포함.
+> 코드는 다 짜여 있다. 아래는 **계정/키를 채워 실제로 돌리는** 순서다. 각 단계 끝에 검증 방법이 있다.
+> DB는 아직 한 번도 붙은 적이 없다. 3번까지 가면 처음으로 실데이터를 보게 된다.
 
-## 0. 계정·키 (사용자 손 필요)
+## 0. 계정 — 사용자 손이 필요한 유일한 구간
 
-1. **Supabase** 신규 프로젝트 생성 → Settings > API에서 확보:
-   - Project URL, `anon` key, `service_role` key
-2. **Anthropic** 콘솔에서 개인용 API 키 발급 + 월 지출 한도 설정
-3. **GitHub** private repo `briefing-bot` 생성
-4. **Vercel** 가입/로그인 (GitHub 연동)
+| 서비스 | 왜 | 주의 |
+|---|---|---|
+| **Neon** (neon.tech) | Postgres 0.5GB 무료 | **개인 계정**으로. 카드 불필요 |
+| **Anthropic** | 요약(Haiku) | 개인용 키 분리 + **월 지출 한도 설정** |
+| **Vercel** | 웹 + 수집 실행 | GitHub 연동 |
 
-## 1. 로컬 준비
+GitHub 저장소는 이미 있다(`sideprojectjunhokim/briefing_bot`).
 
-```bash
-cd C:/briefing-bot
-git init && git add -A && git commit -m "scaffold: briefing-bot web v1"
-# GitHub repo 연결 후
-git remote add origin git@github.com:<you>/briefing-bot.git
-git push -u origin main
+## 1. Neon — DB 만들고 스키마 넣기
 
-# Supabase CLI
-supabase login
-supabase link --project-ref <PROJECT_REF>
-```
-
-## 2. 스키마 + 시드 (Phase 1)
+1. Neon 대시보드 → 새 프로젝트 → **Connection string** 복사 (`postgresql://…?sslmode=require`).
+2. 로컬에 넣는다:
 
 ```bash
-supabase db push                      # 0001_init.sql 적용
-# 시드로 카드 렌더 확인 (Supabase SQL 에디터에 supabase/seed.sql 붙여넣기 실행)
-```
-
-## 3. 웹 배포 (Phase 1)
-
-```bash
-cd web
+cd C:/briefing-bot/web
+cp .env.example .env.local     # DATABASE_URL, ANTHROPIC_API_KEY, CRON_SECRET, APP_PASSWORD 채우기
 npm install
-cp .env.example .env.local            # 값 채우기 (URL + anon key)
-npm run dev                           # http://localhost:3000 — 시드 카드 보이면 OK
+npm run db:push                # db/schema.sql 적용 — 여러 번 돌려도 안전
 ```
-- Vercel: New Project → repo 선택 → **Root Directory = `web`** → env 2개(`NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`) 입력 → Deploy.
-- 배포 URL에서 시드 카드 보이면 Phase 1 완료. 시드 행은 지워도 됨.
 
-## 4. briefing-job 배포 (Phase 2)
+**검증:** `스키마 적용 완료 — N개 구문.` 이 뜬다. Neon SQL 에디터에서
+`select table_name from information_schema.tables where table_schema='public';`
+→ `briefings` · `source_items` · `module_prefs` 세 개.
+
+## 2. 로컬에서 첫 수집
 
 ```bash
-supabase secrets set \
-  ANTHROPIC_API_KEY=<key> \
-  JOB_SECRET=<아무 랜덤 문자열>
-# SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY 는 Edge 런타임에 자동 주입됨
-
-supabase functions deploy briefing-job   # config.toml에 verify_jwt=false 설정됨
-
-# 수동 호출 → briefings 행 생성 + 웹에 카드 확인
-curl -X POST https://<PROJECT_REF>.functions.supabase.co/briefing-job \
-  -H "content-type: application/json" \
-  -H "x-job-secret: <JOB_SECRET>" \
-  -d '{"module":"technews"}'
+npm run dev
 ```
-- 검증: 위 curl을 **2번** 실행 → 1번째 `status:ok`, 2번째 `skipped_empty`(중복제거 동작).
 
-## 5. 자동화 (Phase 2)
+브라우저로 직접 호출한다(수동 실행 겸 디버그 경로):
 
-- `supabase/cron.sql`의 `<PROJECT_REF>`·`<JOB_SECRET>` 치환 후 SQL 에디터에서 실행.
-- 다음날 08:00 KST에 웹이 자동 갱신되는지 확인.
+```
+http://localhost:3000/api/collect?secret=<CRON_SECRET>
+```
 
-## 이후 (Phase 3+)
+**검증:** 응답 JSON에 `"technews": { "status": "ok", "itemCount": N }`.
+`http://localhost:3000` 을 열면 그 장이 큐에 있고, 누르면 펼쳐지고, 닫으면 흐려진다. 새로고침하면 큐에서 빠진다.
 
-- 모듈 추가: `supabase/functions/_shared/modules/`에 파일 1개 + `index.ts` 배열 1줄 + `cron.sql`에 잡 1블록.
-- 소스 추가: 해당 모듈의 `sources` 배열에 `Source` 1개.
+**한 번 더 호출한다.** 두 번째는 `"status": "no_new"` 여야 한다 — 중복제거가 도는지 보는 검사다.
+
+> 이 단계에서 **리드 문단을 실제로 읽어 보는 게 진짜 작업이다.** 제목을 다시 나열하고 있으면 프롬프트를 고친다(`web/lib/collect/prompt.ts`). 지금 붙어 있는 소스는 GeekNews 하나뿐이라 technews만 채워진다.
+
+## 3. Vercel 배포
+
+- New Project → 저장소 선택 → **Root Directory = `web`**
+- Environment Variables 4개:
+
+| 키 | 값 |
+|---|---|
+| `DATABASE_URL` | Neon connection string |
+| `ANTHROPIC_API_KEY` | Anthropic 키 |
+| `CRON_SECRET` | 아무 랜덤 문자열 (아래 GitHub secret과 같은 값) |
+| `APP_PASSWORD` | 화면 접근 비밀번호. **비워 두면 게이트가 꺼진다** |
+
+- Deploy → 배포 URL 확인.
+
+**검증:** 배포 URL을 열면 `/onboarding`으로 튕기고, 이름 + 비밀번호로 들어가진다. 비밀번호를 틀리면 안 들어가진다.
+
+## 4. 시계 붙이기 (GitHub Actions)
+
+저장소 Settings → Secrets and variables → Actions → **New repository secret** 2개:
+
+| 키 | 값 |
+|---|---|
+| `BASE_URL` | `https://<프로젝트>.vercel.app` (끝에 슬래시 없이) |
+| `CRON_SECRET` | Vercel에 넣은 것과 **같은 값** |
+
+**검증:** Actions 탭 → `collect` → **Run workflow**로 수동 실행. 로그에 수집 결과 JSON이 찍히고 초록이면 통과.
+그다음 정시(±20분)에 자동으로 한 번 더 도는지 확인한다.
+
+## 운영 메모
+
+- **스케줄은 정시에 안 돈다.** GitHub 부하에 따라 5~20분 밀린다. 정각을 전제로 만들지 마라.
+- **저장소가 60일 무활동이면 스케줄이 자동 비활성화된다.** 혼자 쓰는 저장소라 실제로 걸릴 수 있고, Actions 탭에서 다시 켜면 된다.
+- 특정 모듈만 돌리기: `/api/collect?secret=…&module=technews` 또는 워크플로 수동 실행의 `module` 입력.
+- 소스 하나가 계속 막히면 해당 `Source`의 `enabled: false` 한 줄로 끈다.
+- 스키마를 바꾸면 `db/schema.sql`에 idempotent하게 추가하고 `npm run db:push`를 다시 돌린다.
+
+## 다음 (05 문서 4단계)
+
+지금 실제로 붙어 있는 소스는 `technews/geeknews` 하나뿐이다. 나머지 세 모듈은 틀만 있고 `enabled:false`다.
+쉬운 것부터 하나씩 붙이고 실측한다 — 붙는 것만 남기고, 막히면 끈다.

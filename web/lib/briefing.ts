@@ -1,6 +1,6 @@
 // briefings.content(LLM 마크다운 리스트)를 화면용 구조로 파싱.
 // 실데이터 형식: "- [제목](링크) — 요약" / 데모·템플릿 형식: "- **[출처] 제목** — 부가설명"
-import type { Briefing } from "./supabase";
+import type { Briefing } from "./db";
 
 export interface BriefingItem {
   title: string;
@@ -102,4 +102,24 @@ export function timeOf(b: Briefing): string {
     hour: "2-digit",
     minute: "2-digit",
   });
+}
+
+/** KST M월 D일 */
+export function dateOf(b: Briefing): string {
+  return new Date(b.created_at).toLocaleDateString("ko-KR", {
+    timeZone: "Asia/Seoul",
+    month: "long",
+    day: "numeric",
+  });
+}
+
+/**
+ * 아카이브에서 되꺼낸 장에 붙일 라벨. 새것으로 위장하지 않는 게 요점이라
+ * "방금"이라고 쓰지 않고 실제로 며칠 전 것인지 밝힌다.
+ */
+export function agoLabel(iso: string): string {
+  const days = Math.floor((Date.now() - new Date(iso).getTime()) / 86_400_000);
+  if (days >= 7) return `${Math.floor(days / 7)}주 전 것`;
+  if (days >= 1) return `${days}일 전 것`;
+  return "어제 것";
 }
