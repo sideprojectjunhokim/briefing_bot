@@ -12,6 +12,7 @@ export async function POST(req: Request) {
   const body = (await req.json().catch(() => ({}))) as {
     keys?: unknown;
     custom?: unknown;
+    starred?: unknown;
     pickMax?: unknown;
   };
 
@@ -48,6 +49,10 @@ export async function POST(req: Request) {
 
   if (!hasDb) return NextResponse.json({ ok: true, persisted: false });
 
-  await applySetup(pickedModules, topics, pickMax);
+  const starred = Array.isArray(body.starred)
+    ? body.starred.filter((k): k is string => typeof k === "string")
+    : [];
+
+  await applySetup(pickedModules, topics, pickMax, starred);
   return NextResponse.json({ ok: true, persisted: true, modules: pickedModules.length, topics: topics.length });
 }

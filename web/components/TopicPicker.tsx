@@ -7,9 +7,67 @@ import type { CustomTopic } from "@/lib/onboarding";
 interface Props {
   picked: string[];
   custom: CustomTopic[];
+  /** 별표 — 더 많이 받기로 한 것 */
+  starred: string[];
   onToggle: (key: string) => void;
+  onToggleStar: (key: string) => void;
   onAddCustom: (t: CustomTopic) => void;
   onRemoveCustom: (key: string) => void;
+}
+
+/**
+ * 관심사 카드 한 장.
+ *
+ * 카드 자체가 버튼이라 별을 그 안에 넣을 수 없다(버튼 안의 버튼). 그래서
+ * 감싸는 칸을 두고 별을 그 위에 얹는다.
+ */
+function Card({
+  label,
+  hint,
+  on,
+  starred,
+  onToggle,
+  onToggleStar,
+}: {
+  label: string;
+  hint: string;
+  on: boolean;
+  starred: boolean;
+  onToggle: () => void;
+  onToggleStar?: () => void;
+}) {
+  return (
+    <div className="ob-card-wrap">
+      <button
+        type="button"
+        className="ob-card"
+        data-on={on ? "" : undefined}
+        data-star={starred ? "" : undefined}
+        aria-pressed={on}
+        onClick={onToggle}
+      >
+        <span className="lb">{label}</span>
+        <span className="ht">{hint}</span>
+        <span className="mk" aria-hidden>
+          {on ? "✓" : "+"}
+        </span>
+      </button>
+
+      {on && onToggleStar && (
+        <button
+          type="button"
+          className="ob-star"
+          data-on={starred ? "" : undefined}
+          aria-pressed={starred}
+          aria-label={`${label} ${starred ? "별표 빼기" : "별표 — 더 많이 받기"}`}
+          title={starred ? "별표 빼기" : "더 많이 받기"}
+          onClick={onToggleStar}
+        >
+          ★
+        </button>
+      )}
+    </div>
+  );
 }
 
 /**
@@ -18,7 +76,15 @@ interface Props {
  * 두 곳에 복사해 두면 한쪽만 고쳐진다 — 이 저장소에서 이미 한 번 당한 실수라
  * (펼친 폴더와 /c/[key]가 본문을 각자 그렸다) 처음부터 하나로 둔다.
  */
-export function TopicPicker({ picked, custom, onToggle, onAddCustom, onRemoveCustom }: Props) {
+export function TopicPicker({
+  picked,
+  custom,
+  starred,
+  onToggle,
+  onToggleStar,
+  onAddCustom,
+  onRemoveCustom,
+}: Props) {
   const [draft, setDraft] = useState("");
 
   const add = (e: FormEvent) => {
@@ -39,25 +105,17 @@ export function TopicPicker({ picked, custom, onToggle, onAddCustom, onRemoveCus
         <section key={group} className="ob-group">
           <h2 className="ob-group-head">{group}</h2>
           <div className="ob-grid">
-            {TOPICS.filter((t) => t.group === group).map((t) => {
-              const on = picked.includes(t.key);
-              return (
-                <button
-                  key={t.key}
-                  type="button"
-                  className="ob-card"
-                  data-on={on ? "" : undefined}
-                  aria-pressed={on}
-                  onClick={() => onToggle(t.key)}
-                >
-                  <span className="lb">{t.label}</span>
-                  <span className="ht">{t.hint}</span>
-                  <span className="mk" aria-hidden>
-                    {on ? "✓" : "+"}
-                  </span>
-                </button>
-              );
-            })}
+            {TOPICS.filter((t) => t.group === group).map((t) => (
+              <Card
+                key={t.key}
+                label={t.label}
+                hint={t.hint}
+                on={picked.includes(t.key)}
+                starred={starred.includes(t.key)}
+                onToggle={() => onToggle(t.key)}
+                onToggleStar={() => onToggleStar(t.key)}
+              />
+            ))}
           </div>
         </section>
       ))}
@@ -82,19 +140,15 @@ export function TopicPicker({ picked, custom, onToggle, onAddCustom, onRemoveCus
         {custom.length > 0 && (
           <div className="ob-grid">
             {custom.map((c) => (
-              <button
+              <Card
                 key={c.key}
-                type="button"
-                className="ob-card"
-                data-on=""
-                onClick={() => onRemoveCustom(c.key)}
-              >
-                <span className="lb">{c.label}</span>
-                <span className="ht">직접 추가 · 누르면 뺍니다</span>
-                <span className="mk" aria-hidden>
-                  ✓
-                </span>
-              </button>
+                label={c.label}
+                hint="직접 추가 · 누르면 뺍니다"
+                on
+                starred={starred.includes(c.key)}
+                onToggle={() => onRemoveCustom(c.key)}
+                onToggleStar={() => onToggleStar(c.key)}
+              />
             ))}
           </div>
         )}

@@ -19,6 +19,7 @@ export default function OnboardingPage() {
   const [step, setStep] = useState(0);
   const [picked, setPicked] = useState<string[]>(DEFAULT_ON);
   const [custom, setCustom] = useState<CustomTopic[]>([]);
+  const [starred, setStarred] = useState<string[]>([]);
   const [pickMax, setPickMax] = useState(8);
   const [leaving, setLeaving] = useState(false);
 
@@ -29,7 +30,7 @@ export default function OnboardingPage() {
 
   const finish = () => {
     if (leaving) return;
-    saveSetup({ keys: picked, custom, pickMax });
+    saveSetup({ keys: picked, custom, starred, pickMax });
     if (reduced) {
       router.push("/login?from=onboarding");
       return;
@@ -72,7 +73,11 @@ export default function OnboardingPage() {
           <TopicPicker
             picked={picked}
             custom={custom}
+            starred={starred}
             onToggle={toggle}
+            onToggleStar={(k) =>
+              setStarred((s) => (s.includes(k) ? s.filter((x) => x !== k) : [...s, k]))
+            }
             onAddCustom={(t) => setCustom((c) => [...c, t])}
             onRemoveCustom={(k) => setCustom((c) => c.filter((x) => x.key !== k))}
           />

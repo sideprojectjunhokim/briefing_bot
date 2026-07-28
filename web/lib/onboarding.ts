@@ -16,6 +16,8 @@ export interface SetupChoice {
   keys: string[];
   /** 직접 친 관심사 */
   custom: CustomTopic[];
+  /** 별표 — 더 많이 받기로 한 것 */
+  starred: string[];
   /** 한 장에 담을 항목 상한 */
   pickMax: number;
 }
@@ -33,7 +35,12 @@ export function consumeSetup(): SetupChoice | null {
   try {
     const v = JSON.parse(raw) as SetupChoice;
     if (!Array.isArray(v.keys) || typeof v.pickMax !== "number") return null;
-    return { keys: v.keys, custom: Array.isArray(v.custom) ? v.custom : [], pickMax: v.pickMax };
+    return {
+      keys: v.keys,
+      custom: Array.isArray(v.custom) ? v.custom : [],
+      starred: Array.isArray(v.starred) ? v.starred : [],
+      pickMax: v.pickMax,
+    };
   } catch {
     return null;
   }

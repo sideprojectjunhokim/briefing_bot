@@ -8,6 +8,7 @@ export const dynamic = "force-dynamic";
 const DEMO: CurrentSetup = {
   keys: MODULE_ORDER.map((m) => m.key),
   custom: [],
+  starred: [],
   pickMax: 8,
 };
 

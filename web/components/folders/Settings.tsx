@@ -20,12 +20,18 @@ export function Settings({ current, index, demo }: { current: CurrentSetup; inde
   const router = useRouter();
   const [picked, setPicked] = useState<string[]>(current.keys);
   const [custom, setCustom] = useState<CustomTopic[]>(current.custom);
+  const [starred, setStarred] = useState<string[]>(current.starred);
   const [pickMax, setPickMax] = useState(current.pickMax);
   const [state, setState] = useState<"idle" | "saving" | "saved" | "error">("idle");
 
   const dirty =
-    JSON.stringify([[...picked].sort(), custom.map((c) => c.key).sort(), pickMax]) !==
-    JSON.stringify([[...current.keys].sort(), current.custom.map((c) => c.key).sort(), current.pickMax]);
+    JSON.stringify([[...picked].sort(), custom.map((c) => c.key).sort(), [...starred].sort(), pickMax]) !==
+    JSON.stringify([
+      [...current.keys].sort(),
+      current.custom.map((c) => c.key).sort(),
+      [...current.starred].sort(),
+      current.pickMax,
+    ]);
 
   const total = picked.length + custom.length;
 
@@ -35,7 +41,7 @@ export function Settings({ current, index, demo }: { current: CurrentSetup; inde
     const res = await fetch("/api/prefs/setup", {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ keys: picked, custom, pickMax }),
+      body: JSON.stringify({ keys: picked, custom, starred, pickMax }),
     }).catch(() => null);
 
     if (!res?.ok) {
@@ -64,6 +70,10 @@ export function Settings({ current, index, demo }: { current: CurrentSetup; inde
           <TopicPicker
             picked={picked}
             custom={custom}
+            starred={starred}
+            onToggleStar={(k) =>
+              setStarred((s) => (s.includes(k) ? s.filter((x) => x !== k) : [...s, k]))
+            }
             onToggle={(k) =>
               setPicked((p) => (p.includes(k) ? p.filter((x) => x !== k) : [...p, k]))
             }

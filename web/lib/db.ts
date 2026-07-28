@@ -198,29 +198,61 @@ export interface CurrentSetup {
   keys: string[];
   /** 직접 추가한 관심사 */
   custom: { key: string; label: string }[];
+  /** 별표 — 더 많이 받기로 한 것 */
+  starred: string[];
+  /** 별표 안 한 것의 기본 상한 */
   pickMax: number;
+}
+
+/**
+ * 별표를 붙이면 몇 개까지 받나.
+ *
+ * 기본의 두 배로 잡되 20을 넘기지 않는다. "더 많이"가 뜻이 있으려면 눈에 띄게
+ * 달라야 하고, 그렇다고 한 장이 스무 줄을 넘어가면 그건 읽을거리가 아니라 목록이다.
+ */
+export function starredPickMax(base: number): number {
+  return Math.min(20, base * 2);
 }
 
 /** 설정 화면이 지금 상태를 그대로 띄우려고 읽는다 */
 export async function getCurrentSetup(): Promise<CurrentSetup> {
   const sql = requireSql();
   const [prefRows, topicRows] = await Promise.all([
-    sql`select module_key, muted, pick_max from module_prefs`,
-    sql`select key, label, custom, pick_max from topics where enabled = true order by created_at`,
+    sql`select module_key, muted, pick_max, starred from module_prefs`,
+    sql`select key, label, custom, pick_max, starred from topics where enabled = true order by created_at`,
   ]);
-  const prefs = prefRows as { module_key: string; muted: boolean; pick_max: number }[];
-  const topics = topicRows as { key: string; label: string; custom: boolean; pick_max: number }[];
+  const prefs = prefRows as {
+    module_key: string;
+    muted: boolean;
+    pick_max: number;
+    starred: boolean;
+  }[];
+  const topics = topicRows as {
+    key: string;
+    label: string;
+    custom: boolean;
+    pick_max: number;
+    starred: boolean;
+  }[];
 
   // 아직 아무것도 저장 안 됐으면(온보딩 전) 코드 모듈은 전부 켜진 것으로 본다
   const curated = prefs.length
     ? prefs.filter((p) => !p.muted).map((p) => p.module_key)
     : MODULE_LABELS.map((m) => m.key);
 
+  // 기본 상한은 별표 **안 한** 것에서 읽는다. 별표한 건 두 배로 부풀려 저장돼
+  // 있어서, 그걸 읽으면 저장할 때마다 상한이 계속 두 배씩 커진다.
+  const base =
+    topics.find((t) => !t.starred)?.pick_max ?? prefs.find((p) => !p.starred)?.pick_max ?? 8;
+
   return {
     keys: [...curated, ...topics.filter((t) => !t.custom).map((t) => t.key)],
     custom: topics.filter((t) => t.custom).map((t) => ({ key: t.key, label: t.label })),
-    // pick_max는 전부 같은 값으로 저장되므로 아무거나 하나면 된다
-    pickMax: topics[0]?.pick_max ?? prefs[0]?.pick_max ?? 8,
+    starred: [
+      ...prefs.filter((p) => p.starred && !p.muted).map((p) => p.module_key),
+      ...topics.filter((t) => t.starred).map((t) => t.key),
+    ],
+    pickMax: base,
   };
 }
 
@@ -235,20 +267,27 @@ export async function applySetup(
   pickedModules: string[],
   topics: SetupTopic[],
   pickMax: number,
+  starred: string[] = [],
 ): Promise<void> {
   const sql = requireSql();
+  const star = new Set(starred);
+  const maxFor = (key: string) => (star.has(key) ? starredPickMax(pickMax) : pickMax);
 
   // 코드에 소스가 있는 4모듈 — 고르지 않은 건 muted
   const keys = MODULE_KEYS;
   const muted = keys.map((k) => !pickedModules.includes(k));
-  const maxes = keys.map(() => pickMax);
+  const maxes = keys.map(maxFor);
+  const stars = keys.map((k) => star.has(k));
   await sql`
-    insert into module_prefs (module_key, pick_max, muted, updated_at)
-    select k, m, mu, now()
-    from unnest(${keys}::text[], ${maxes}::int[], ${muted}::boolean[]) as x(k, m, mu)
+    insert into module_prefs (module_key, pick_max, muted, starred, updated_at)
+    select k, m, mu, st, now()
+    from unnest(
+      ${keys}::text[], ${maxes}::int[], ${muted}::boolean[], ${stars}::boolean[]
+    ) as x(k, m, mu, st)
     on conflict (module_key) do update
       set pick_max = excluded.pick_max,
           muted = excluded.muted,
+          starred = excluded.starred,
           updated_at = now()`;
 
   // 검색 관심사 — 고른 것만 켜고 나머지는 끈다(지우지 않는다. 지우면
@@ -258,16 +297,18 @@ export async function applySetup(
   if (topics.length === 0) return;
 
   await sql`
-    insert into topics (key, label, query, custom, pick_max, enabled)
-    select k, l, q, c, ${pickMax}, true
+    insert into topics (key, label, query, custom, pick_max, starred, enabled)
+    select k, l, q, c, m, st, true
     from unnest(
       ${picked}::text[], ${topics.map((t) => t.label)}::text[],
-      ${topics.map((t) => t.query)}::text[], ${topics.map((t) => t.custom)}::boolean[]
-    ) as x(k, l, q, c)
+      ${topics.map((t) => t.query)}::text[], ${topics.map((t) => t.custom)}::boolean[],
+      ${topics.map((t) => maxFor(t.key))}::int[], ${topics.map((t) => star.has(t.key))}::boolean[]
+    ) as x(k, l, q, c, m, st)
     on conflict (key) do update
       set label = excluded.label,
           query = excluded.query,
           pick_max = excluded.pick_max,
+          starred = excluded.starred,
           enabled = true`;
 }
 

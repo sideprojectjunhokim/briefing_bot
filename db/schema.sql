@@ -115,3 +115,9 @@ alter table briefings add column if not exists read_at timestamptz;
 alter table briefings add column if not exists archived_at timestamptz;
 alter table briefings add column if not exists resurfaced_at timestamptz;
 alter table source_items add column if not exists briefing_id bigint references briefings(id) on delete set null;
+
+-- 별표 = "이건 더 많이 보고 싶다". pick_max는 별표를 반영한 **실효값**이고,
+-- starred는 화면이 별을 다시 그리려고 따로 들고 있는 상태다. pick_max가 기본값보다
+-- 크다는 걸로 역산하면 기본값을 바꾸는 순간 별이 제멋대로 켜지고 꺼진다.
+alter table topics add column if not exists starred boolean not null default false;
+alter table module_prefs add column if not exists starred boolean not null default false;

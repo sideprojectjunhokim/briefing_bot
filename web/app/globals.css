@@ -684,6 +684,32 @@ body {
 .ob-card[data-on] .mk { color: var(--ds-royal); }
 .ob-card:focus-visible { outline: 2px solid var(--ds-royal); outline-offset: 3px; }
 
+/* 별표 = 더 많이 받기.
+   카드 자체가 버튼이라 별을 그 안에 못 넣는다(버튼 안의 버튼). 감싸는 칸을 두고
+   그 위에 얹는다. */
+.ob-card-wrap { position: relative; display: flex; }
+.ob-card-wrap .ob-card { flex: 1; }
+.ob-card[data-star] { border-color: var(--ds-royal); }
+
+.ob-star {
+  position: absolute;
+  right: 0.55rem;
+  bottom: 0.55rem;
+  appearance: none;
+  cursor: pointer;
+  background: none;
+  border: 0;
+  padding: 0.2rem 0.3rem;
+  font-size: 0.95rem;
+  line-height: 1;
+  color: var(--ds-line);
+  transition: color 0.12s ease, transform 0.12s ease;
+}
+.ob-star:hover { color: var(--ds-gray); transform: scale(1.15); }
+.ob-star[data-on] { color: var(--ds-royal); }
+.ob-star[data-on]:hover { color: var(--ds-royal); }
+.ob-star:focus-visible { outline: 2px solid var(--ds-royal); outline-offset: 2px; border-radius: 2px; }
+
 .ob-note {
   margin: 0 0 0.8rem;
   font-family: var(--ds-serif);
