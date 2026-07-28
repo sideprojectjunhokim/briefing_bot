@@ -310,6 +310,87 @@ export interface SetupTopic {
   enabled: boolean;
 }
 
+/**
+ * 관심사 하나를 켜거나 끈다. 대화창에서 "주식은 빼줘" 같은 말이 오는 경로다.
+ * 끄면 그 관심사의 안 읽은 카드도 큐에서 내린다 — 설정 화면과 같은 규칙이다.
+ */
+export async function setTopicEnabled(key: string, enabled: boolean): Promise<boolean> {
+  const sql = requireSql();
+  const hit = (await sql`
+    update topics set enabled = ${enabled} where key = ${key} returning key`) as unknown[];
+
+  if (hit.length === 0) {
+    const m = (await sql`
+      update module_prefs set muted = ${!enabled}, updated_at = now()
+      where module_key = ${key} returning module_key`) as unknown[];
+    if (m.length === 0) return false;
+  }
+
+  if (!enabled) {
+    await sql`
+      update briefings set archived_at = now()
+      where module_key = ${key} and kind = 'live'
+        and read_at is null and archived_at is null`;
+  }
+  return true;
+}
+
+/** 관심사를 새로 만든다. 대화창에서 "인디게임도 추가해줘" 하면 여기로 온다 */
+export async function addTopic(key: string, label: string, query: string): Promise<void> {
+  const sql = requireSql();
+  const base = await currentBase();
+  await sql`
+    insert into topics (key, label, query, custom, pick_max, starred, enabled)
+    values (${key}, ${label}, ${query}, true, ${base}, false, true)
+    on conflict (key) do update
+      set label = excluded.label, query = excluded.query, enabled = true`;
+}
+
+/** 지금 쓰는 기본 상한 — 별표 안 한 행에서 읽는다 */
+async function currentBase(): Promise<number> {
+  const sql = requireSql();
+  const rows = (await sql`
+    select pick_max from topics where enabled and not starred
+    union all
+    select pick_max from module_prefs where not muted and not starred
+    limit 1`) as { pick_max: number }[];
+  return rows[0]?.pick_max ?? 8;
+}
+
+/** 대화창이 "지금 뭘 받고 있나"를 알아야 켜고 끄고 별표를 시킬 수 있다 */
+export async function listTopicsForChat(): Promise<
+  { key: string; label: string; enabled: boolean; starred: boolean }[]
+> {
+  const sql = requireSql();
+  const [t, m] = await Promise.all([
+    sql`select key, label, enabled, starred from topics order by created_at`,
+    sql`select module_key, muted, starred from module_prefs`,
+  ]);
+  const topics = t as { key: string; label: string; enabled: boolean; starred: boolean }[];
+  const prefs = m as { module_key: string; muted: boolean; starred: boolean }[];
+  const prefOf = new Map(prefs.map((p) => [p.module_key, p]));
+  return [
+    ...MODULE_LABELS.map(({ key, label }) => ({
+      key,
+      label,
+      enabled: !prefOf.get(key)?.muted,
+      starred: Boolean(prefOf.get(key)?.starred),
+    })),
+    ...topics,
+  ];
+}
+
+/** 카드 하나 — 대화의 바탕이 된다 */
+export async function getBriefing(id: number): Promise<Briefing | null> {
+  const sql = requireSql();
+  const rows = (await sql`
+    select id, module_key, kind, item_count, content, status, error,
+           est_read_seconds, thread_of, thread_note,
+           read_at, archived_at, resurfaced_at, created_at
+    from briefings where id = ${id} limit 1`) as Briefing[];
+  return rows[0] ?? null;
+}
+
 /** 관심사를 완전히 지운다 — 직접 추가한 것만. 프리셋은 끄기만 한다 */
 export async function deleteTopic(key: string): Promise<void> {
   const sql = requireSql();

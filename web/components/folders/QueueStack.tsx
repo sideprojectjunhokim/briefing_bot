@@ -8,6 +8,7 @@ import { agoLabel, parseItems, timeOf } from "@/lib/briefing";
 import { formatReadTime } from "@/lib/collect/readtime";
 import { consumeArrive } from "@/lib/session";
 import { StarToggle } from "@/components/StarToggle";
+import { Chat } from "@/components/Chat";
 import { FileBody } from "./FileBody";
 import { Shell } from "./Shell";
 
@@ -139,6 +140,9 @@ export function QueueStack({ queue, index, failures, nudge, demo }: Props) {
               ))}
             </div>
           )}
+
+          {/* 홈에서는 카드 없이 관심사 관리나 짧은 질문용 */}
+          <Chat compact placeholder="관심사를 바꾸거나 물어보기 — 예: 인디게임도 추가해줘" />
         </>
       )}
     </Shell>
@@ -295,12 +299,15 @@ function OpenSheet({
             {briefing.thread_note && <p className="fs-thread lead">↩ {briefing.thread_note}</p>}
             <FileBody briefing={briefing} meta={meta} />
             {meta.key !== "wrap" && (
-              <a className="fs-permalink" href={`/c/${meta.key}`}>
+              <a className="fs-permalink" href={`/c/${encodeURIComponent(meta.key)}`}>
                 {meta.name} 지난 것 보기 ↗
               </a>
             )}
           </motion.div>
         </AnimatePresence>
+
+        {/* 이 카드가 그대로 컨텍스트다 — 복붙 없이 "이거 진짜야?"가 된다 */}
+        <Chat cardId={briefing.id} placeholder="이 문서에 대해 물어보기 — 예: 두 번째 거 진짜야?" />
       </motion.article>
     </div>
   );
