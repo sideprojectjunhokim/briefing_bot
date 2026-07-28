@@ -1,0 +1,566 @@
+/* ─── 서체 역할 (layout.tsx next/font 변수) ───
+   serif: 디스플레이·본문(Newsreader + Noto Serif KR)
+   display: 큰 라벨·폴더 탭(Anton — 라틴 전용, 한글은 세리프로 폴백)
+   mono: 태그·타임스탬프·메타(JetBrains Mono) */
+:root {
+  --ds-serif: var(--font-newsreader), var(--font-serifkr), "Noto Serif KR", Batang, serif;
+  --ds-display: var(--font-anton), var(--font-serifkr), sans-serif;
+  --ds-mono: var(--font-jbmono), "IBM Plex Mono", Consolas, monospace;
+
+  /* mosbyfiles 팔레트 — 종이+잉크 근단색, 일렉트릭 블루 하나만 팝 */
+  --ds-ground: #ece7df;
+  --ds-paper: #fdfaf7;
+  --ds-paper-2: #f6f0e7;
+  --ds-ink: #191919;
+  --ds-gray: #787a7f;
+  --ds-line: rgba(25, 25, 25, 0.14);
+  --ds-blue: #00b2ff;
+  --ds-royal: #1e4bd7;
+  --ds-red: #bd2c2c;
+  --ds-shadow-folder: 0 -1px 8px rgba(0, 0, 0, 0.15), 0 18px 32px -20px rgba(0, 0, 0, 0.38);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --ds-ground: #131312;
+    --ds-paper: #1e1d1a;
+    --ds-paper-2: #262420;
+    --ds-ink: #f0ede6;
+    --ds-gray: #94958f;
+    --ds-line: rgba(240, 237, 230, 0.16);
+    --ds-royal: #7d9bff;
+    --ds-red: #e06060;
+    --ds-shadow-folder: 0 -1px 8px rgba(0, 0, 0, 0.5), 0 18px 32px -18px rgba(0, 0, 0, 0.7);
+  }
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: #0e0f13;
+  color: #e7e9ee;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+    "Apple SD Gothic Neo", "Noto Sans KR", sans-serif;
+  line-height: 1.6;
+}
+
+/* ═══ 온보딩·로그인 (다크 스테이지 — 메인 리디자인 승인 후 종이 룩 통일 예정) ═══ */
+
+/* ── 온보딩·로그인 ──────────────────────────────────────────────────────
+   전부 --ds-* 토큰으로 돌린다. 예전 값들(#161820 배경, #2563eb 그라디언트 알약)은
+   어느 AI 서비스에나 붙어 있는 기본값이었고, 폴더 화면과 다른 제품처럼 보였다.
+   여기와 본편은 같은 종이 위에 있어야 한다.
+   ────────────────────────────────────────────────────────────────────── */
+.stage {
+  position: relative;
+  min-height: 100dvh;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  background: var(--ds-ground);
+  padding: 24px;
+}
+
+.fx-backdrop {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  color: var(--ds-line);
+}
+.fx-motif { position: absolute; height: auto; }
+
+.hero { position: relative; max-width: 33rem; }
+
+/* 워드마크가 곧 마크다 — 본편 사이드바와 같은 글자를 써서 같은 제품임을 먼저 말한다 */
+.hero-mark {
+  font-family: var(--ds-display);
+  font-size: 1.5rem;
+  line-height: 1.05;
+  letter-spacing: 0.01em;
+  color: var(--ds-ink);
+  margin: 0 0 2.4rem;
+}
+.hero-title {
+  font-family: var(--ds-serif);
+  font-size: clamp(2.4rem, 5vw, 3.4rem);
+  line-height: 1.18;
+  letter-spacing: -0.015em;
+  margin: 0 0 1.1rem;
+  color: var(--ds-ink);
+}
+.hero-title em { font-style: italic; color: var(--ds-royal); }
+.hero-sub {
+  font-family: var(--ds-serif);
+  font-size: 1.06rem;
+  line-height: 1.75;
+  color: var(--ds-gray);
+  margin: 0 0 2.4rem;
+  max-width: 30rem;
+}
+
+/* 버튼도 종이다 — 탭처럼 모서리를 깎아 서류철 어휘 안에 둔다 */
+.btn-primary {
+  appearance: none;
+  cursor: pointer;
+  background: var(--ds-paper);
+  border: 1px solid var(--ds-ink);
+  color: var(--ds-ink);
+  font-family: var(--ds-display);
+  font-size: 0.95rem;
+  letter-spacing: 0.05em;
+  padding: 0.85rem 2.2rem;
+  clip-path: polygon(0 0, 100% 0, calc(100% - 10px) 100%, 0 100%);
+  transition: background 0.16s ease, color 0.16s ease, transform 0.16s ease;
+}
+.btn-primary:hover { background: var(--ds-ink); color: var(--ds-paper); transform: translateY(-1px); }
+.btn-primary:focus-visible { outline: 2px solid var(--ds-royal); outline-offset: 3px; }
+.btn-primary.wide { width: 100%; clip-path: none; }
+
+/* 화면을 덮는 전환 — 원이 아니라 종이 한 장이 올라와 덮는다 */
+.sweep-circle {
+  position: fixed;
+  left: 50%;
+  top: 50%;
+  width: 120px;
+  height: 120px;
+  margin: -60px 0 0 -60px;
+  border-radius: 50%;
+  background: var(--ds-paper);
+  z-index: 40;
+}
+.arrival-sweep { position: fixed; inset: 0; background: var(--ds-paper); z-index: 40; }
+
+.login-card {
+  position: relative;
+  width: min(400px, 92vw);
+  text-align: center;
+  background: rgba(20, 22, 30, 0.85);
+  border: 1px solid #262933;
+  border-radius: 24px;
+  padding: 34px 30px 30px;
+  backdrop-filter: blur(10px);
+  box-shadow: 0 30px 60px -30px rgba(0, 0, 0, 0.7);
+}
+.login-title { font-size: 26px; margin: 14px 0 6px; }
+.login-sub { color: #8b8f9a; font-size: 14px; margin: 0 0 22px; }
+.input {
+  width: 100%;
+  background: #12141b;
+  border: 1px solid #2c3040;
+  border-radius: 14px;
+  color: #e7e9ee;
+  font-size: 16px;
+  padding: 13px 16px;
+  margin-bottom: 14px;
+  outline: none;
+  transition: border-color 0.15s ease;
+}
+.input:focus { border-color: #6ea8fe; }
+
+/* ═══ 메인 — 서류 캐비닛 (.ds 스코프) ═══ */
+
+.ds {
+  min-height: 100dvh;
+  display: grid;
+  grid-template-columns: 14rem 1fr;
+  background:
+    radial-gradient(1400px 500px at 50% -8%, rgba(0, 0, 0, 0.06), transparent 70%),
+    var(--ds-ground);
+  color: var(--ds-ink);
+  font-family: var(--ds-serif);
+}
+
+/* ── 사이드바 ── */
+.ds-side {
+  position: sticky; top: 0;
+  height: 100dvh;
+  display: flex; flex-direction: column;
+  gap: 1.6rem;
+  padding: 2.2rem 1.5rem 1.8rem;
+  border-right: 1px solid var(--ds-line);
+}
+.ds-wordmark {
+  font-family: var(--ds-display);
+  font-size: 1.45rem;
+  line-height: 1.08;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  margin: 0;
+  color: var(--ds-ink);
+}
+.ds-wordmark a { color: inherit; text-decoration: none; }
+.ds-date {
+  font-style: italic;
+  font-size: 0.95rem;
+  color: var(--ds-gray);
+  margin: -0.9rem 0 0;
+}
+.ds-index { display: flex; flex-direction: column; gap: 0.15rem; margin-top: 0.4rem; }
+.ds-index-head {
+  font-family: var(--ds-mono);
+  font-size: 0.62rem;
+  letter-spacing: 0.18em;
+  color: var(--ds-gray);
+  margin-bottom: 0.5rem;
+}
+.ds-index a {
+  display: flex; align-items: baseline; gap: 0.6rem;
+  padding: 0.42rem 0.5rem;
+  margin: 0 -0.5rem;
+  border-radius: 4px;
+  text-decoration: none;
+  color: var(--ds-ink);
+  transition: background 0.12s ease, color 0.12s ease;
+}
+.ds-index a:hover { background: rgba(0, 178, 255, 0.1); }
+.ds-index a.on { background: var(--ds-ink); color: var(--ds-paper); }
+.ds-index .no { font-family: var(--ds-mono); font-size: 0.68rem; color: var(--ds-gray); }
+.ds-index a.on .no { color: inherit; opacity: 0.7; }
+.ds-index .nm { font-size: 0.95rem; }
+.ds-index .cnt { margin-left: auto; font-family: var(--ds-mono); font-size: 0.66rem; color: var(--ds-gray); }
+.ds-index a.on .cnt { color: inherit; opacity: 0.7; }
+
+.ds-side-foot {
+  margin-top: auto;
+  display: flex; flex-direction: column; gap: 0.55rem;
+  font-family: var(--ds-mono);
+  font-size: 0.66rem;
+  color: var(--ds-gray);
+}
+.ds-flag-demo { color: var(--ds-royal); }
+.ds-flag-fail { color: var(--ds-red); }
+.ds-user { display: flex; align-items: center; gap: 0.5rem; }
+.ds-logout {
+  appearance: none; background: none; cursor: pointer;
+  border: 1px solid var(--ds-line);
+  border-radius: 3px;
+  color: var(--ds-gray);
+  font-family: var(--ds-mono);
+  font-size: 0.62rem;
+  padding: 0.15rem 0.5rem;
+  transition: color 0.12s ease, border-color 0.12s ease;
+}
+.ds-logout:hover { color: var(--ds-red); border-color: var(--ds-red); }
+
+/* ── 메인 영역 ── */
+.ds-main { padding: 3.4rem 4rem 5rem; }
+.ds-main-head { max-width: 680px; margin: 0 auto 3.4rem; }
+.ds-kicker {
+  font-family: var(--ds-mono);
+  font-size: 0.68rem;
+  letter-spacing: 0.22em;
+  color: var(--ds-gray);
+  margin: 0 0 0.6rem;
+}
+.ds-headline {
+  font-size: clamp(1.7rem, 3.2vw, 2.3rem);
+  font-weight: 500;
+  line-height: 1.3;
+  letter-spacing: -0.01em;
+  margin: 0;
+}
+.ds-headline em { font-style: italic; color: var(--ds-royal); }
+
+/* ── 폴더 스택 ── */
+.fs-stack {
+  max-width: 680px;
+  margin: 0 auto;
+  perspective: 3000px;
+  padding-top: 2.4rem; /* 첫 폴더 탭 자리 */
+}
+.fs-folder {
+  position: relative;
+  transform-style: preserve-3d;
+}
+/* 겹침(-8.05rem: 위 폴더는 탭+캡션 한 줄만 남기고 가림)은 FolderStack이 인라인으로 준다.
+   "앞 폴더가 펼쳐졌는가"에 따라 값이 달라지는데, CSS 형제 선택자로는 뒤에서 앞을 볼 수 없다 */
+
+.fs-face {
+  position: relative;
+  height: 10.6rem;
+  border-radius: 4px;
+  background: linear-gradient(180deg, var(--ds-paper) 0%, var(--ds-paper-2) 140%);
+  border: 1px solid var(--ds-line);
+  box-shadow: var(--ds-shadow-folder);
+  padding: 0.95rem 1.4rem;
+  overflow: hidden;
+}
+.fs-folder:nth-child(odd) .fs-face { transform: rotate(-0.35deg); }
+.fs-folder:nth-child(even) .fs-face { transform: rotate(0.3deg); }
+
+/* 탭은 버튼이다 — 생김새는 .fs-tab 그대로 두고 버튼 기본 스타일만 지운다 */
+.fs-tab-btn {
+  appearance: none;
+  border: 0;
+  cursor: pointer;
+  font: inherit;
+  color: inherit;
+}
+.fs-tab-btn:focus-visible {
+  outline: 2px solid var(--ds-royal);
+  outline-offset: 3px;
+}
+
+/* ── 펼친 상태 ── 탭 넷이 문서 위에 줄로 서고, 아래에 종이 한 장 ── */
+.fs-open {
+  max-width: 680px;
+  margin: 0 auto;
+  padding-top: 2.4rem;
+}
+/* 탭은 펼친 뒤에도 제자리다 — 좌우로 어긋난 --tl 좌표를 그대로 쓴다.
+   한 줄로 모으면 "어느 폴더에서 왔는지"가 사라지고 그냥 탭 메뉴가 된다 */
+.fs-tabrow {
+  position: relative;
+  height: 2.15rem;
+}
+.fs-tabrow .fs-tab {
+  top: 0;
+  opacity: 0.5;
+}
+.fs-tabrow .fs-tab[data-active] {
+  opacity: 1;
+  z-index: 2;
+  background: linear-gradient(180deg, var(--ds-paper), var(--ds-paper));
+}
+.fs-tabrow .fs-tab:not([data-active]):hover { opacity: 0.8; }
+
+.fs-sheet {
+  position: relative;
+  border-radius: 4px;
+  background: linear-gradient(180deg, var(--ds-paper) 0%, var(--ds-paper-2) 190%);
+  border: 1px solid var(--ds-line);
+  box-shadow: var(--ds-shadow-folder);
+  padding: 1.5rem 2rem 2.2rem;
+}
+.fs-sheet-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1.1rem;
+}
+.fs-sheet .fp-title { margin-top: 0; }
+.fs-permalink {
+  display: inline-block;
+  margin-top: 1.2rem;
+  font-family: var(--ds-mono);
+  font-size: 0.66rem;
+  letter-spacing: 0.05em;
+  color: var(--ds-gray);
+  text-decoration: none;
+}
+.fs-permalink:hover { color: var(--ds-royal); }
+
+.fs-tab {
+  position: absolute;
+  top: -2.05rem;
+  left: var(--tl, 4%);
+  height: 2.15rem;
+  min-width: 10rem;
+  padding: 0 1.3rem;
+  display: flex; align-items: center; gap: 0.55rem;
+  background: linear-gradient(180deg, var(--ds-paper-2), var(--ds-paper));
+  clip-path: polygon(7% 0, 93% 0, 100% 100%, 0 100%);
+  filter: drop-shadow(0 -3px 3px rgba(0, 0, 0, 0.14));
+}
+.fs-tab-en {
+  font-family: var(--ds-display);
+  font-size: 0.92rem;
+  letter-spacing: 0.05em;
+  color: var(--ds-ink);
+  white-space: nowrap;
+}
+.fs-tab-kr {
+  font-family: var(--ds-mono);
+  font-size: 0.62rem;
+  color: var(--ds-gray);
+  white-space: nowrap;
+}
+
+.fs-cover-row {
+  display: flex; align-items: baseline; justify-content: space-between;
+  font-family: var(--ds-mono);
+  font-size: 0.68rem;
+  color: var(--ds-gray);
+  letter-spacing: 0.04em;
+}
+.fs-open-hint {
+  color: var(--ds-royal);
+  opacity: 0;
+  transition: opacity 0.15s ease;
+}
+.fs-folder:hover .fs-open-hint { opacity: 1; }
+.fs-preview {
+  margin: 0.8rem 0 0;
+  font-size: 1.06rem;
+  line-height: 1.5;
+  color: var(--ds-ink);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.fs-preview .src { font-family: var(--ds-mono); font-size: 0.66rem; color: var(--ds-gray); margin-right: 0.45rem; }
+.fs-empty-note { margin: 0.8rem 0 0; font-style: italic; font-size: 0.95rem; color: var(--ds-gray); }
+.fs-more {
+  margin-top: 0.55rem;
+  font-family: var(--ds-mono);
+  font-size: 0.64rem;
+  letter-spacing: 0.1em;
+  color: var(--ds-gray);
+}
+
+/* ── 펼쳐진 파일 (카테고리 페이지) ── */
+.fp-wrap { max-width: 860px; margin: 2.3rem auto 0; position: relative; }
+.fp-sheet {
+  position: relative;
+  background: var(--ds-paper);
+  border: 1px solid var(--ds-line);
+  border-radius: 4px;
+  box-shadow: var(--ds-shadow-folder);
+  padding: 2.8rem 3.2rem 3.8rem;
+  min-height: 68vh;
+}
+.fp-tab { top: -2.05rem; } /* .fs-tab 재사용, 시트 위에 얹힘 */
+
+.fp-close {
+  position: absolute;
+  top: 1.4rem; right: 1.6rem;
+  appearance: none; background: none; cursor: pointer;
+  border: 1px solid var(--ds-line);
+  border-radius: 3px;
+  font-family: var(--ds-mono);
+  font-size: 0.66rem;
+  letter-spacing: 0.08em;
+  color: var(--ds-gray);
+  padding: 0.35rem 0.7rem;
+  transition: color 0.12s ease, border-color 0.12s ease;
+}
+.fp-close:hover { color: var(--ds-ink); border-color: var(--ds-ink); }
+
+.fp-title {
+  font-family: var(--ds-display);
+  font-size: clamp(2.6rem, 6vw, 4rem);
+  line-height: 1;
+  letter-spacing: 0.01em;
+  text-transform: uppercase;
+  margin: 0 0 0.3rem;
+}
+.fp-title-kr { font-style: italic; font-size: 1.05rem; color: var(--ds-gray); margin: 0 0 1.1rem; }
+.fp-meta {
+  display: flex; flex-wrap: wrap; gap: 0.4rem 1.1rem;
+  font-family: var(--ds-mono);
+  font-size: 0.68rem;
+  letter-spacing: 0.05em;
+  color: var(--ds-gray);
+  padding-bottom: 1.5rem;
+  border-bottom: 1px solid var(--ds-ink);
+  margin-bottom: 0.4rem;
+}
+.fp-meta .fail { color: var(--ds-red); }
+
+.fp-items { list-style: none; margin: 0; padding: 0; }
+.fp-item {
+  display: grid;
+  grid-template-columns: 2.2rem 1fr;
+  gap: 0 0.4rem;
+  padding: 1.35rem 0 1.45rem;
+  border-bottom: 1px solid var(--ds-line);
+}
+.fp-item .no {
+  font-family: var(--ds-mono);
+  font-size: 0.7rem;
+  color: var(--ds-gray);
+  padding-top: 0.5rem;
+}
+.fp-item-title {
+  margin: 0;
+  font-size: 1.32rem;
+  font-weight: 600;
+  line-height: 1.45;
+  letter-spacing: -0.005em;
+}
+.fp-item-title a { color: inherit; text-decoration: none; background-image: linear-gradient(var(--ds-blue), var(--ds-blue)); background-size: 0 2px; background-position: 0 100%; background-repeat: no-repeat; transition: background-size 0.2s ease; }
+.fp-item-title a:hover { background-size: 100% 2px; }
+.fp-item-note { margin: 0.4rem 0 0; font-size: 0.97rem; line-height: 1.7; color: var(--ds-gray); }
+.fp-item-meta { display: flex; align-items: center; gap: 0.9rem; margin-top: 0.65rem; font-family: var(--ds-mono); font-size: 0.66rem; }
+.fp-src { border: 1px solid var(--ds-line); border-radius: 3px; padding: 0.12rem 0.45rem; color: var(--ds-gray); }
+.fp-link { color: var(--ds-royal); text-decoration: none; letter-spacing: 0.06em; }
+.fp-link:hover { text-decoration: underline; }
+
+/* 시세 — 숫자 블록 그리드 (헤어라인) */
+/* 칸 사이 선을 컨테이너 배경(gap 1px)으로 그리면, 마지막 줄에 남는 빈 트랙까지
+   선 색으로 칠해져 회색 덩어리가 생긴다(4칸을 3열에 넣을 때 관측). 선은 칸이 그린다 */
+.fp-market {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(185px, 1fr));
+  border-top: 1px solid var(--ds-line);
+  border-left: 1px solid var(--ds-line);
+  margin-top: 1.6rem;
+}
+.fp-market-cell {
+  background: var(--ds-paper);
+  padding: 1.25rem 1.3rem 1.35rem;
+  border-right: 1px solid var(--ds-line);
+  border-bottom: 1px solid var(--ds-line);
+}
+.fp-market-cell .lb {
+  font-family: var(--ds-mono);
+  font-size: 0.64rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--ds-gray);
+  margin-bottom: 0.55rem;
+}
+.fp-market-cell .val { font-size: 2.05rem; font-weight: 500; line-height: 1.15; letter-spacing: -0.01em; word-break: keep-all; }
+.fp-market-cell .val.sm { font-size: 1.4rem; line-height: 1.3; }
+.fp-market-cell .dt { font-family: var(--ds-mono); font-size: 0.78rem; margin-top: 0.45rem; }
+.dt.up { color: var(--ds-red); }   /* 상승=적 (국내 관례) */
+.dt.down { color: var(--ds-royal); } /* 하락=청 */
+.dt.flat { color: var(--ds-gray); }
+
+/* 리드 문단 — 목록 위에 오는 오늘의 한 문단. 잡지 표제 아래 서 있는 그 글이다.
+   본문 항목보다 크고 느슨하게 둬야 "읽는 것"과 "훑는 것"이 구분된다 */
+.fp-lead {
+  margin: 1.4rem 0 0;
+  padding-bottom: 1.5rem;
+  border-bottom: 1px solid var(--ds-line);
+  font-size: 1.12rem;
+  line-height: 1.75;
+  color: var(--ds-ink);
+  max-width: 46ch;
+}
+
+.fp-empty {
+  padding: 5rem 0;
+  text-align: center;
+  font-style: italic;
+  color: var(--ds-gray);
+}
+
+/* ── 반응형 ── */
+@media (max-width: 920px) {
+  .ds { grid-template-columns: 1fr; }
+  .ds-side {
+    position: static; height: auto;
+    flex-direction: row; flex-wrap: wrap; align-items: baseline;
+    gap: 0.8rem 1.4rem;
+    padding: 1.2rem 1.3rem;
+    border-right: 0;
+    border-bottom: 1px solid var(--ds-line);
+  }
+  .ds-date { margin: 0; }
+  .ds-index { flex-direction: row; gap: 0.55rem; margin: 0; }
+  .ds-index-head, .ds-index .no, .ds-index .cnt { display: none; }
+  .ds-side-foot { margin: 0 0 0 auto; flex-direction: row; align-items: center; gap: 0.9rem; }
+  .ds-main { padding: 2.2rem 1.25rem 4rem; }
+  .fs-tab { left: clamp(0%, var(--tl, 4%), 48%); min-width: 8rem; padding: 0 0.9rem; }
+  .fp-sheet { padding: 2.2rem 1.4rem 3rem; }
+  .fp-item { grid-template-columns: 1fr; }
+  .fp-item .no { display: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * { transition-duration: 0.01ms !important; }
+}

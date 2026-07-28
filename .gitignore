@@ -1,0 +1,20 @@
+# deps / build
+node_modules/
+web/.next/
+web/out/
+web/next-env.d.ts
+
+# env / secrets
+.env
+.env.local
+*.local
+web/.env
+web/.env.local
+
+# supabase local
+supabase/.branches/
+supabase/.temp/
+
+# os
+.DS_Store
+Thumbs.db
