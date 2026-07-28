@@ -20,20 +20,22 @@ export const MODULE_ORDER: ModuleMeta[] = [
 /** 하루 끝 한 장. 수집 모듈이 아니라서 색인에는 안 넣는다. */
 const WRAP: ModuleMeta = { key: "wrap", name: "하루 끝", en: "END OF DAY", tabLeft: 40 };
 
-const unknown = (key: string): ModuleMeta => ({
-  key,
-  name: key,
-  en: key.toUpperCase(),
-  tabLeft: 4,
-});
-
-/** 큐에는 색인에 없는 종류(wrap)도 섞이므로 항상 무언가를 돌려준다 */
-export function metaOf(key: string): ModuleMeta {
-  if (key === WRAP.key) return WRAP;
-  return MODULE_ORDER.find((m) => m.key === key) ?? unknown(key);
+/** 탭이 서로 어긋나 보이게 키에서 자리를 뽑는다 — 안 그러면 관심사 탭이 전부 겹친다 */
+const TAB_SLOTS = [4, 28, 52, 76];
+function slotOf(key: string): number {
+  let h = 0;
+  for (let i = 0; i < key.length; i++) h = (h * 31 + key.charCodeAt(i)) >>> 0;
+  return TAB_SLOTS[h % TAB_SLOTS.length];
 }
 
-/** 색인에 있는 모듈인가 — /c/[key] 아카이브가 열릴 수 있는 키인지 판별 */
-export function isIndexedModule(key: string): boolean {
-  return MODULE_ORDER.some((m) => m.key === key);
+/**
+ * 큐에는 코드에 없는 것들이 섞인다 — 사용자가 직접 추가한 관심사, 하루 끝 한 장.
+ * 그래서 항상 무언가를 돌려주고, 이름은 DB에서 온 label을 우선 쓴다.
+ */
+export function metaOf(key: string, label?: string): ModuleMeta {
+  if (key === WRAP.key) return WRAP;
+  const known = MODULE_ORDER.find((m) => m.key === key);
+  if (known) return known;
+  const name = label ?? key.replace(/^my-/, "");
+  return { key, name, en: name, tabLeft: slotOf(key) };
 }

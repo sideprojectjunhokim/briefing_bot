@@ -7,11 +7,11 @@ import { QueueStack } from "@/components/folders/QueueStack";
 export const dynamic = "force-dynamic";
 
 export default async function Home() {
-  const { queue, unreadByModule, failures, nudge, demo } = await getQueueView();
+  const { queue, index, failures, nudge, demo } = await getQueueView();
   return (
     <QueueStack
       queue={queue}
-      unreadByModule={unreadByModule}
+      index={index}
       failures={failures}
       nudge={nudge}
       demo={demo}

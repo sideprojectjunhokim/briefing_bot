@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
-import type { Briefing, SkipNudge } from "@/lib/db";
+import type { Briefing, IndexEntry, SkipNudge } from "@/lib/db";
 import { metaOf, type ModuleMeta } from "@/lib/modules";
 import { agoLabel, parseItems, timeOf } from "@/lib/briefing";
 import { formatReadTime } from "@/lib/collect/readtime";
@@ -16,7 +16,7 @@ const EASE = [0.16, 1, 0.3, 1] as const;
 
 interface Props {
   queue: Briefing[];
-  unreadByModule: Record<string, number>;
+  index: IndexEntry[];
   failures: { module_key: string; error: string | null }[];
   nudge: SkipNudge | null;
   demo: boolean;
@@ -32,7 +32,9 @@ interface Props {
  * 예전에는 모듈 넷이 고정 칸이었고 각 칸이 항상 최신 수집분만 보여 줬다.
  * 그러면 잠깐 자리를 비운 사이 지나간 건 그냥 사라졌다.
  */
-export function QueueStack({ queue, unreadByModule, failures, nudge, demo }: Props) {
+export function QueueStack({ queue, index, failures, nudge, demo }: Props) {
+  // 관심사 이름은 DB에서 온다 — 코드엔 직접 추가한 것들의 이름이 없다
+  const labels = new Map(index.map((e) => [e.key, e.label]));
   const reduced = Boolean(useReducedMotion());
   const [openId, setOpenId] = useState<number | null>(null);
   // 읽음 처리한 장은 이번 화면에서는 남겨 둔다 — 열자마자 발밑에서 사라지면
@@ -78,7 +80,7 @@ export function QueueStack({ queue, unreadByModule, failures, nudge, demo }: Pro
 
   return (
     <Shell
-      unreadByModule={unreadByModule}
+      index={index}
       failures={failures}
       demo={demo}
       active={null}
@@ -107,6 +109,7 @@ export function QueueStack({ queue, unreadByModule, failures, nudge, demo }: Pro
           {openBriefing ? (
             <OpenSheet
               briefing={openBriefing}
+              label={labels.get(openBriefing.module_key)}
               reduced={reduced}
               onClose={() => setOpenId(null)}
               onUnread={() => {
@@ -124,7 +127,8 @@ export function QueueStack({ queue, unreadByModule, failures, nudge, demo }: Pro
                 <QueueFolder
                   key={b.id}
                   briefing={b}
-                  index={i}
+                  label={labels.get(b.module_key)}
+                  pos={i}
                   read={readIds.has(b.id)}
                   reduced={reduced}
                   onOpen={() => open(b)}
@@ -155,31 +159,35 @@ function Tab({ meta, id, reduced }: { meta: ModuleMeta; id: number; reduced: boo
 
 function QueueFolder({
   briefing,
-  index,
+  label,
+  pos,
   read,
   reduced,
   onOpen,
 }: {
   briefing: Briefing;
-  index: number;
+  /** DB에서 온 표시 이름. 코드엔 직접 추가한 관심사의 이름이 없다 */
+  label?: string;
+  /** 스택에서 몇 번째인가 — 겹침과 z축 순서를 정한다 */
+  pos: number;
   read: boolean;
   reduced: boolean;
   onOpen: () => void;
 }) {
-  const meta = metaOf(briefing.module_key);
+  const meta = metaOf(briefing.module_key, label);
   const first = parseItems(briefing.content)[0];
 
   return (
     <motion.div
       className="fs-folder"
       data-read={read ? "" : undefined}
-      style={{ zIndex: index + 1, marginTop: index === 0 ? 0 : OVERLAP }}
+      style={{ zIndex: pos + 1, marginTop: pos === 0 ? 0 : OVERLAP }}
       initial={reduced ? false : { opacity: 0, y: 46 }}
       animate={{ opacity: read ? 0.45 : 1, y: 0 }}
       transition={
         reduced
           ? { duration: 0 }
-          : { delay: 0.1 + index * 0.09, type: "spring", stiffness: 320, damping: 26 }
+          : { delay: 0.1 + pos * 0.09, type: "spring", stiffness: 320, damping: 26 }
       }
       whileHover={reduced ? undefined : { y: -12 }}
     >
@@ -216,16 +224,18 @@ function QueueFolder({
 
 function OpenSheet({
   briefing,
+  label,
   reduced,
   onClose,
   onUnread,
 }: {
   briefing: Briefing;
+  label?: string;
   reduced: boolean;
   onClose: () => void;
   onUnread: () => void;
 }) {
-  const meta = metaOf(briefing.module_key);
+  const meta = metaOf(briefing.module_key, label);
   return (
     <div className="fs-open">
       <div className="fs-tabrow">

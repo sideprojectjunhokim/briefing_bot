@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { motion, useReducedMotion } from "motion/react";
-import type { Briefing } from "@/lib/db";
+import type { Briefing, IndexEntry } from "@/lib/db";
 import type { ModuleMeta } from "@/lib/modules";
 import { dateOf, timeOf } from "@/lib/briefing";
 import { formatReadTime } from "@/lib/collect/readtime";
@@ -20,12 +20,12 @@ import { Shell } from "./Shell";
 export function ModuleArchive({
   briefings,
   meta,
-  unreadByModule,
+  index,
   demo,
 }: {
   briefings: Briefing[];
   meta: ModuleMeta;
-  unreadByModule: Record<string, number>;
+  index: IndexEntry[];
   demo: boolean;
 }) {
   const router = useRouter();
@@ -41,7 +41,7 @@ export function ModuleArchive({
   }, [router]);
 
   return (
-    <Shell unreadByModule={unreadByModule} failures={[]} demo={demo} active={meta.key}>
+    <Shell index={index} failures={[]} demo={demo} active={meta.key}>
       {() => (
         <div className="fp-wrap">
           <motion.article
@@ -66,7 +66,7 @@ export function ModuleArchive({
             <p className="fp-title-kr">{meta.name} · 지난 것</p>
             <div className="fp-meta">
               <span>{briefings.length}장</span>
-              <span>안 읽음 {unreadByModule[meta.key] ?? 0}</span>
+              <span>안 읽음 {index.find((e) => e.key === meta.key)?.unread ?? 0}</span>
             </div>
 
             {briefings.length === 0 ? (

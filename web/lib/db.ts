@@ -54,7 +54,54 @@ export async function getUnread(): Promise<Briefing[]> {
   return rows as Briefing[];
 }
 
-/** 사이드바 색인 — 모듈별 안 읽은 장 수 */
+export interface IndexEntry {
+  key: string;
+  label: string;
+  unread: number;
+  /** 검색으로 채우는 관심사인가(직접 추가한 것 포함) */
+  topic: boolean;
+}
+
+/**
+ * 사이드바 색인 = **지금 받기로 한 것 전부.**
+ *
+ * 예전엔 코드에 박힌 4모듈만 그렸다. 관심사를 22개로 늘리고 직접 추가까지
+ * 되게 해 놓고 색인은 그대로 뒀더니, 큐에는 카드가 있는데 색인엔 그 항목이
+ * 아예 없어서 숫자가 안 맞았다.
+ */
+export async function getIndex(): Promise<IndexEntry[]> {
+  const sql = requireSql();
+  const [counts, prefRows, topicRows] = await Promise.all([
+    getUnreadCountsByModule(),
+    sql`select module_key, muted from module_prefs`,
+    sql`select key, label from topics where enabled = true order by created_at`,
+  ]);
+  const prefs = prefRows as { module_key: string; muted: boolean }[];
+  const topics = topicRows as { key: string; label: string }[];
+
+  const mutedOf = new Map(prefs.map((p) => [p.module_key, p.muted]));
+  const curated = MODULE_LABELS.filter(({ key }) => !mutedOf.get(key)).map(({ key, label }) => ({
+    key,
+    label,
+    unread: counts[key] ?? 0,
+    topic: false,
+  }));
+
+  return [
+    ...curated,
+    ...topics.map((t) => ({ key: t.key, label: t.label, unread: counts[t.key] ?? 0, topic: true })),
+  ];
+}
+
+/** 코드에 소스가 있는 모듈. lib/modules.ts의 MODULE_ORDER와 같아야 한다 */
+const MODULE_LABELS = [
+  { key: "hotdeal", label: "핫딜" },
+  { key: "market", label: "시세" },
+  { key: "technews", label: "테크 뉴스" },
+  { key: "community", label: "커뮤니티" },
+];
+
+/** 모듈·관심사별 안 읽은 장 수 */
 export async function getUnreadCountsByModule(): Promise<Record<string, number>> {
   const sql = requireSql();
   const rows = (await sql`

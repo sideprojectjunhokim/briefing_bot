@@ -3,13 +3,13 @@
 import { ReactNode, useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import type { SkipNudge } from "@/lib/db";
-import { MODULE_ORDER, metaOf } from "@/lib/modules";
+import type { IndexEntry, SkipNudge } from "@/lib/db";
+import { metaOf } from "@/lib/modules";
 import { clearUser, getUser } from "@/lib/session";
 
 interface ShellProps {
-  /** 모듈별 안 읽은 장 수 */
-  unreadByModule: Record<string, number>;
+  /** 지금 받기로 한 것 전부 + 각각 안 읽은 장 수 */
+  index: IndexEntry[];
   failures: { module_key: string; error: string | null }[];
   demo: boolean;
   /** 지금 열려 있는 모듈 아카이브 (홈이면 null) */
@@ -24,7 +24,7 @@ interface ShellProps {
  * 색인의 숫자는 "그 모듈이 오늘 몇 건이었나"가 아니라 **안 읽은 장 수**다.
  * 이 화면에서 숫자는 언제나 "아직 남은 것"을 뜻해야 한다.
  */
-export function Shell({ unreadByModule, failures, demo, active, nudge, children }: ShellProps) {
+export function Shell({ index, failures, demo, active, nudge, children }: ShellProps) {
   const router = useRouter();
   const [user, setUserName] = useState<string | null>(null);
 
@@ -64,18 +64,19 @@ export function Shell({ unreadByModule, failures, demo, active, nudge, children 
         </h1>
         <p className="ds-date">{today}</p>
 
-        <nav className="ds-index" aria-label="모듈 색인">
+        <nav className="ds-index" aria-label="관심사 색인">
           <span className="ds-index-head">INDEX</span>
-          {MODULE_ORDER.map((m, i) => {
-            const n = unreadByModule[m.key] ?? 0;
-            return (
-              <Link key={m.key} href={`/c/${m.key}`} className={active === m.key ? "on" : ""}>
-                <span className="no">{String(i + 1).padStart(2, "0")}</span>
-                <span className="nm">{m.name}</span>
-                <span className="cnt">{n > 0 ? n : "—"}</span>
-              </Link>
-            );
-          })}
+          {index.map((e, i) => (
+            <Link
+              key={e.key}
+              href={`/c/${encodeURIComponent(e.key)}`}
+              className={active === e.key ? "on" : ""}
+            >
+              <span className="no">{String(i + 1).padStart(2, "0")}</span>
+              <span className="nm">{e.label}</span>
+              <span className="cnt">{e.unread > 0 ? e.unread : "—"}</span>
+            </Link>
+          ))}
         </nav>
 
         <div className="ds-side-foot">
