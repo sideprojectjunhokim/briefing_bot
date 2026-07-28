@@ -67,7 +67,7 @@ function Card({
           title={starred ? "별표 빼기" : `별표 — ${starMax}개까지 받기`}
           onClick={onToggleStar}
         >
-          ★
+          {starred ? "★" : "☆"}
         </button>
       )}
     </div>
@@ -107,6 +107,13 @@ export function TopicPicker({
 
   return (
     <>
+      {/* 별이 무엇인지 어딘가엔 적혀 있어야 한다. 카드 구석의 작은 글자만으로는
+          누를 수 있는 것인지조차 안 읽힌다 */}
+      <p className="ob-hint">
+        고른 카드의 <span className="ob-hint-star">☆</span>를 누르면 그 관심사만{" "}
+        <strong>{starMax}개까지</strong> 받습니다. 나머지는 {pickMax}개입니다.
+      </p>
+
       {TOPIC_GROUPS.map((group) => (
         <section key={group} className="ob-group">
           <h2 className="ob-group-head">{group}</h2>

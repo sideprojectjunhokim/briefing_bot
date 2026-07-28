@@ -629,6 +629,20 @@ body {
 .ob-stage { align-items: start; padding-block: 4.5rem; }
 .ob-hero[data-wide] .hero-title.ob-tight { font-size: clamp(2rem, 3.6vw, 2.6rem); }
 
+.ob-hint {
+  margin: 1.6rem 0 0;
+  padding: 0.7rem 0.95rem;
+  background: var(--ds-paper);
+  border: 1px solid var(--ds-line);
+  border-radius: 3px;
+  font-family: var(--ds-serif);
+  font-size: 0.92rem;
+  line-height: 1.6;
+  color: var(--ds-gray);
+}
+.ob-hint strong { color: var(--ds-ink); font-weight: 600; }
+.ob-hint-star { color: var(--ds-royal); font-size: 1.05rem; }
+
 .ob-group { margin-top: 2rem; }
 .ob-group-head {
   font-family: var(--ds-mono);
@@ -691,21 +705,24 @@ body {
 .ob-card-wrap .ob-card { flex: 1; }
 .ob-card[data-star] { border-color: var(--ds-royal); }
 
+/* 안 눌린 상태를 --ds-line(불투명도 14%)으로 뒀더니 종이 위에서 얼룩처럼 보여
+   누를 수 있는 것으로 읽히지 않았다. 색을 올리고, 빈 별(☆)과 찬 별(★)로
+   상태를 글자 자체에서 구분한다. */
 .ob-star {
   position: absolute;
-  right: 0.55rem;
-  bottom: 0.55rem;
+  right: 0.5rem;
+  bottom: 0.45rem;
   appearance: none;
   cursor: pointer;
   background: none;
   border: 0;
-  padding: 0.2rem 0.3rem;
-  font-size: 0.95rem;
+  padding: 0.25rem 0.35rem;
+  font-size: 1.05rem;
   line-height: 1;
-  color: var(--ds-line);
+  color: var(--ds-gray);
   transition: color 0.12s ease, transform 0.12s ease;
 }
-.ob-star:hover { color: var(--ds-gray); transform: scale(1.15); }
+.ob-star:hover { color: var(--ds-ink); transform: scale(1.2); }
 .ob-star[data-on] { color: var(--ds-royal); }
 .ob-star[data-on]:hover { color: var(--ds-royal); }
 .ob-star:focus-visible { outline: 2px solid var(--ds-royal); outline-offset: 2px; border-radius: 2px; }
