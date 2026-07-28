@@ -7,6 +7,7 @@ import { metaOf, type ModuleMeta } from "@/lib/modules";
 import { agoLabel, parseItems, timeOf } from "@/lib/briefing";
 import { formatReadTime } from "@/lib/collect/readtime";
 import { consumeArrive } from "@/lib/session";
+import { StarToggle } from "@/components/StarToggle";
 import { FileBody } from "./FileBody";
 import { Shell } from "./Shell";
 
@@ -35,6 +36,7 @@ interface Props {
 export function QueueStack({ queue, index, failures, nudge, demo }: Props) {
   // 관심사 이름은 DB에서 온다 — 코드엔 직접 추가한 것들의 이름이 없다
   const labels = new Map(index.map((e) => [e.key, e.label]));
+  const starOf = new Set(index.filter((e) => e.starred).map((e) => e.key));
   const reduced = Boolean(useReducedMotion());
   const [openId, setOpenId] = useState<number | null>(null);
   // 읽음 처리한 장은 이번 화면에서는 남겨 둔다 — 열자마자 발밑에서 사라지면
@@ -110,6 +112,7 @@ export function QueueStack({ queue, index, failures, nudge, demo }: Props) {
             <OpenSheet
               briefing={openBriefing}
               label={labels.get(openBriefing.module_key)}
+              starred={starOf.has(openBriefing.module_key)}
               reduced={reduced}
               onClose={() => setOpenId(null)}
               onUnread={() => {
@@ -225,12 +228,14 @@ function QueueFolder({
 function OpenSheet({
   briefing,
   label,
+  starred,
   reduced,
   onClose,
   onUnread,
 }: {
   briefing: Briefing;
   label?: string;
+  starred: boolean;
   reduced: boolean;
   onClose: () => void;
   onUnread: () => void;
@@ -258,6 +263,16 @@ function OpenSheet({
             </span>
           </div>
           <div className="fs-sheet-acts">
+            {/* 읽다가 "이거 재밌네" 하는 순간이 별을 붙일 타이밍이다.
+                그때 설정으로 나가야 하면 아무도 안 붙인다 */}
+            {meta.key !== "wrap" && (
+              <StarToggle
+                topicKey={briefing.module_key}
+                starred={starred}
+                label={meta.name}
+                className="fs-sheet-star"
+              />
+            )}
             <button type="button" className="fp-close" onClick={onUnread}>
               안 읽음으로
             </button>

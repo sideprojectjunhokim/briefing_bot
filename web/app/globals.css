@@ -220,6 +220,22 @@ body {
   margin: -0.9rem 0 0;
 }
 .ds-index { display: flex; flex-direction: column; gap: 0.15rem; margin-top: 0.4rem; }
+
+/* 색인 줄 = 링크 + 그 위에 얹은 별. 링크 안에 버튼을 넣을 수 없어서 이렇게 둔다.
+   별은 평소엔 흐리고 마우스를 올리거나 붙어 있을 때만 또렷하다 — 아홉 줄에
+   전부 진한 별이 서 있으면 정작 붙인 게 어느 건지 안 보인다. */
+.ds-index-row { position: relative; }
+.ds-index-row > a { padding-right: 2.4rem; }
+.ds-index-star {
+  position: absolute;
+  right: 0.35rem;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 0.9rem;
+  opacity: 0.3;
+}
+.ds-index-row:hover .ds-index-star { opacity: 1; }
+.ds-index-star[data-on] { opacity: 1; }
 .ds-index-head {
   font-family: var(--ds-mono);
   font-size: 0.62rem;
@@ -879,8 +895,25 @@ body {
 }
 .fs-thread.lead { margin: 0 0 1rem; font-size: 1rem; }
 
-.fs-sheet-acts { display: flex; gap: 0.5rem; flex-shrink: 0; }
+.fs-sheet-acts { display: flex; align-items: center; gap: 0.5rem; flex-shrink: 0; }
 .fs-sheet-acts .fp-close { position: static; }
+.fs-sheet-star { font-size: 1.15rem; }
+
+/* 어디에 놓이든 별 자체는 같은 물건이다 */
+.star-toggle {
+  appearance: none;
+  cursor: pointer;
+  background: none;
+  border: 0;
+  padding: 0.15rem 0.3rem;
+  line-height: 1;
+  color: var(--ds-gray);
+  transition: color 0.12s ease, transform 0.12s ease, opacity 0.12s ease;
+}
+.star-toggle:hover { color: var(--ds-ink); transform: scale(1.18); }
+.star-toggle[data-on] { color: var(--ds-royal); }
+.star-toggle[data-on]:hover { color: var(--ds-royal); }
+.star-toggle:focus-visible { outline: 2px solid var(--ds-royal); outline-offset: 2px; border-radius: 2px; }
 
 /* 큐가 빈 시간 — 사과하거나 채우려 들지 않는다 */
 .fs-quiet {

@@ -32,6 +32,7 @@ function demoIndex(): IndexEntry[] {
     label: metaOf(key).name,
     unread,
     topic: false,
+    starred: false,
   }));
 }
 

@@ -61,6 +61,40 @@ export interface IndexEntry {
   unread: number;
   /** 검색으로 채우는 관심사인가(직접 추가한 것 포함) */
   topic: boolean;
+  /** 별표 — 더 많이 받기로 한 것 */
+  starred: boolean;
+}
+
+/**
+ * 별표 하나만 뒤집는다.
+ *
+ * 설정 화면을 거치지 않고 읽던 자리에서 바로 누르는 경로다. 읽다가 "이거
+ * 재밌네" 싶은 순간이 별을 붙일 진짜 타이밍인데, 그때 설정으로 나가야 하면
+ * 아무도 안 붙인다.
+ */
+export async function setStar(key: string, starred: boolean): Promise<number> {
+  const sql = requireSql();
+
+  // 기본 상한은 별표 **안 한** 행에서 읽는다. 별표한 행은 이미 부풀려져 있어서
+  // 그걸 기준으로 삼으면 누를 때마다 상한이 두 배씩 커진다.
+  const baseRows = (await sql`
+    select pick_max from topics where enabled and not starred
+    union all
+    select pick_max from module_prefs where not muted and not starred
+    limit 1`) as { pick_max: number }[];
+  const base = baseRows[0]?.pick_max ?? 8;
+  const max = starred ? starredPickMax(base) : base;
+
+  const hit = (await sql`
+    update topics set pick_max = ${max}, starred = ${starred}
+    where key = ${key} and enabled returning key`) as unknown[];
+
+  if (hit.length === 0) {
+    await sql`
+      update module_prefs set pick_max = ${max}, starred = ${starred}, updated_at = now()
+      where module_key = ${key}`;
+  }
+  return max;
 }
 
 /**
@@ -74,23 +108,32 @@ export async function getIndex(): Promise<IndexEntry[]> {
   const sql = requireSql();
   const [counts, prefRows, topicRows] = await Promise.all([
     getUnreadCountsByModule(),
-    sql`select module_key, muted from module_prefs`,
-    sql`select key, label from topics where enabled = true order by created_at`,
+    sql`select module_key, muted, starred from module_prefs`,
+    sql`select key, label, starred from topics where enabled = true order by created_at`,
   ]);
-  const prefs = prefRows as { module_key: string; muted: boolean }[];
-  const topics = topicRows as { key: string; label: string }[];
+  const prefs = prefRows as { module_key: string; muted: boolean; starred: boolean }[];
+  const topics = topicRows as { key: string; label: string; starred: boolean }[];
 
-  const mutedOf = new Map(prefs.map((p) => [p.module_key, p.muted]));
-  const curated = MODULE_LABELS.filter(({ key }) => !mutedOf.get(key)).map(({ key, label }) => ({
-    key,
-    label,
-    unread: counts[key] ?? 0,
-    topic: false,
-  }));
+  const prefOf = new Map(prefs.map((p) => [p.module_key, p]));
+  const curated = MODULE_LABELS.filter(({ key }) => !prefOf.get(key)?.muted).map(
+    ({ key, label }) => ({
+      key,
+      label,
+      unread: counts[key] ?? 0,
+      topic: false,
+      starred: Boolean(prefOf.get(key)?.starred),
+    }),
+  );
 
   return [
     ...curated,
-    ...topics.map((t) => ({ key: t.key, label: t.label, unread: counts[t.key] ?? 0, topic: true })),
+    ...topics.map((t) => ({
+      key: t.key,
+      label: t.label,
+      unread: counts[t.key] ?? 0,
+      topic: true,
+      starred: t.starred,
+    })),
   ];
 }
 

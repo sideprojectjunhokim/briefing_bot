@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import type { IndexEntry, SkipNudge } from "@/lib/db";
 import { metaOf } from "@/lib/modules";
 import { clearUser, getUser } from "@/lib/session";
+import { StarToggle } from "@/components/StarToggle";
 
 interface ShellProps {
   /** 지금 받기로 한 것 전부 + 각각 안 읽은 장 수 */
@@ -67,15 +68,23 @@ export function Shell({ index, failures, demo, active, nudge, children }: ShellP
         <nav className="ds-index" aria-label="관심사 색인">
           <span className="ds-index-head">INDEX</span>
           {index.map((e, i) => (
-            <Link
-              key={e.key}
-              href={`/c/${encodeURIComponent(e.key)}`}
-              className={active === e.key ? "on" : ""}
-            >
-              <span className="no">{String(i + 1).padStart(2, "0")}</span>
-              <span className="nm">{e.label}</span>
-              <span className="cnt">{e.unread > 0 ? e.unread : "—"}</span>
-            </Link>
+            // 별은 링크 안에 못 넣는다(링크 안의 버튼). 줄을 감싸고 그 위에 얹는다
+            <div key={e.key} className="ds-index-row">
+              <Link
+                href={`/c/${encodeURIComponent(e.key)}`}
+                className={active === e.key ? "on" : ""}
+              >
+                <span className="no">{String(i + 1).padStart(2, "0")}</span>
+                <span className="nm">{e.label}</span>
+                <span className="cnt">{e.unread > 0 ? e.unread : "—"}</span>
+              </Link>
+              <StarToggle
+                topicKey={e.key}
+                starred={e.starred}
+                label={e.label}
+                className="ds-index-star"
+              />
+            </div>
           ))}
         </nav>
 
