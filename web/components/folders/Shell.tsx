@@ -79,6 +79,10 @@ export function Shell({ index, failures, demo, active, nudge, children }: ShellP
           ))}
         </nav>
 
+        <Link href="/settings" className={`ds-settings${active === "settings" ? " on" : ""}`}>
+          관심사 바꾸기
+        </Link>
+
         <div className="ds-side-foot">
           {demo && <span className="ds-flag-demo">PREVIEW DATA</span>}
           {failures.length > 0 && (

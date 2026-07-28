@@ -562,6 +562,57 @@ body {
   color: var(--ds-gray);
 }
 
+/* ── 관심사 설정 ── */
+.ds-settings {
+  display: block;
+  margin-top: 1.4rem;
+  font-family: var(--ds-mono);
+  font-size: 0.68rem;
+  letter-spacing: 0.04em;
+  color: var(--ds-gray);
+  text-decoration: none;
+  padding: 0.4rem 0.55rem;
+  border: 1px solid var(--ds-line);
+  border-radius: 3px;
+  transition: color 0.12s ease, border-color 0.12s ease;
+}
+.ds-settings:hover { color: var(--ds-ink); border-color: var(--ds-ink); }
+.ds-settings.on { color: var(--ds-paper); background: var(--ds-ink); border-color: var(--ds-ink); }
+
+.st-wrap { max-width: 60rem; margin: 0 auto; }
+.st-wrap .ds-main-head { max-width: none; margin-bottom: 1.4rem; }
+.st-sub {
+  margin: 1rem 0 0;
+  max-width: 42rem;
+  font-family: var(--ds-serif);
+  font-size: 0.95rem;
+  line-height: 1.7;
+  color: var(--ds-gray);
+}
+.st-sub strong { color: var(--ds-ink); font-weight: 600; }
+
+/* 저장 막대는 스크롤을 따라온다 — 카드가 22개라 아래까지 내려가면
+   저장 버튼이 화면 밖에 있게 된다 */
+.st-bar {
+  position: sticky;
+  bottom: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-top: 2rem;
+  padding: 1rem 0 1.2rem;
+  background: linear-gradient(to top, var(--ds-ground) 72%, transparent);
+}
+.st-state {
+  font-family: var(--ds-mono);
+  font-size: 0.68rem;
+  letter-spacing: 0.04em;
+  color: var(--ds-gray);
+}
+.st-bar .btn-primary:disabled { opacity: 0.4; cursor: default; }
+.st-bar .btn-primary:disabled:hover { background: var(--ds-paper); color: var(--ds-ink); transform: none; }
+
 /* ── 온보딩 스텝 ── */
 /* 히어로는 가운데 놓인 블록이고 글은 그 안에서 왼쪽 정렬이다(.hero 기본).
    스텝 요소도 그 정렬을 따라야 한다 — 카드만 가운데로 모으면 축이 두 개가 된다. */

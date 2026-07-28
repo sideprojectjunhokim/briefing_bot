@@ -193,6 +193,37 @@ export async function getSkipNudge(): Promise<SkipNudge | null> {
  * nudged_at은 건드리지 않는다. 여기서 찍으면 "물어보고 답 받았다"가 되어
  * 건너뛰기 알림이 2주 동안 안 뜬다.
  */
+export interface CurrentSetup {
+  /** 지금 켜져 있는 프리셋 키 (코드 모듈 + 검색 관심사) */
+  keys: string[];
+  /** 직접 추가한 관심사 */
+  custom: { key: string; label: string }[];
+  pickMax: number;
+}
+
+/** 설정 화면이 지금 상태를 그대로 띄우려고 읽는다 */
+export async function getCurrentSetup(): Promise<CurrentSetup> {
+  const sql = requireSql();
+  const [prefRows, topicRows] = await Promise.all([
+    sql`select module_key, muted, pick_max from module_prefs`,
+    sql`select key, label, custom, pick_max from topics where enabled = true order by created_at`,
+  ]);
+  const prefs = prefRows as { module_key: string; muted: boolean; pick_max: number }[];
+  const topics = topicRows as { key: string; label: string; custom: boolean; pick_max: number }[];
+
+  // 아직 아무것도 저장 안 됐으면(온보딩 전) 코드 모듈은 전부 켜진 것으로 본다
+  const curated = prefs.length
+    ? prefs.filter((p) => !p.muted).map((p) => p.module_key)
+    : MODULE_LABELS.map((m) => m.key);
+
+  return {
+    keys: [...curated, ...topics.filter((t) => !t.custom).map((t) => t.key)],
+    custom: topics.filter((t) => t.custom).map((t) => ({ key: t.key, label: t.label })),
+    // pick_max는 전부 같은 값으로 저장되므로 아무거나 하나면 된다
+    pickMax: topics[0]?.pick_max ?? prefs[0]?.pick_max ?? 8,
+  };
+}
+
 export interface SetupTopic {
   key: string;
   label: string;

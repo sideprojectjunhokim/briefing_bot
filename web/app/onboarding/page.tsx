@@ -1,20 +1,14 @@
 "use client";
 
-import { FormEvent, useState } from "react";
+import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { FloatingBackdrop } from "@/components/fx/FloatingBackdrop";
-import { TOPICS, TOPIC_GROUPS, customKey } from "@/lib/topics";
+import { TOPICS } from "@/lib/topics";
 import { saveSetup, type CustomTopic } from "@/lib/onboarding";
+import { TopicPicker, AmountPicker } from "@/components/TopicPicker";
 
 const EASE = [0.16, 1, 0.3, 1] as const;
-
-/** 한 장에 담을 항목 상한. 원래 사양의 "브리핑 시간 선택" 자리를 대신한다 */
-const AMOUNTS = [
-  { value: 3, label: "적게", note: "쉬는 시간에 딱 하나씩" },
-  { value: 8, label: "보통", note: "훑고 고를 만큼" },
-  { value: 12, label: "많이", note: "웬만하면 다 보고 판단" },
-];
 
 /** 처음 열었을 때 켜져 있는 것 — 전부 켜 두면 첫 큐가 잡글로 넘친다 */
 const DEFAULT_ON = ["technews", "hotdeal"];
@@ -25,25 +19,11 @@ export default function OnboardingPage() {
   const [step, setStep] = useState(0);
   const [picked, setPicked] = useState<string[]>(DEFAULT_ON);
   const [custom, setCustom] = useState<CustomTopic[]>([]);
-  const [draft, setDraft] = useState("");
   const [pickMax, setPickMax] = useState(8);
   const [leaving, setLeaving] = useState(false);
 
   const toggle = (key: string) =>
     setPicked((prev) => (prev.includes(key) ? prev.filter((k) => k !== key) : [...prev, key]));
-
-  const addCustom = (e: FormEvent) => {
-    e.preventDefault();
-    const label = draft.trim().slice(0, 40);
-    if (!label) return;
-    const key = customKey(label);
-    if (custom.some((c) => c.key === key) || TOPICS.some((t) => t.label === label)) {
-      setDraft("");
-      return;
-    }
-    setCustom((prev) => [...prev, { key, label }]);
-    setDraft("");
-  };
 
   const total = picked.length + custom.length;
 
@@ -89,70 +69,13 @@ export default function OnboardingPage() {
             언제든 바꿀 수 있습니다. 없는 게 있으면 맨 아래에 직접 적어 주세요.
           </p>
 
-          {TOPIC_GROUPS.map((group) => (
-            <section key={group} className="ob-group">
-              <h2 className="ob-group-head">{group}</h2>
-              <div className="ob-grid">
-                {TOPICS.filter((t) => t.group === group).map((t) => {
-                  const on = picked.includes(t.key);
-                  return (
-                    <button
-                      key={t.key}
-                      type="button"
-                      className="ob-card"
-                      data-on={on ? "" : undefined}
-                      aria-pressed={on}
-                      onClick={() => toggle(t.key)}
-                    >
-                      <span className="lb">{t.label}</span>
-                      <span className="ht">{t.hint}</span>
-                      <span className="mk" aria-hidden>
-                        {on ? "✓" : "+"}
-                      </span>
-                    </button>
-                  );
-                })}
-              </div>
-            </section>
-          ))}
-
-          <section className="ob-group">
-            <h2 className="ob-group-head">직접 추가</h2>
-            <p className="ob-note">
-              적으신 말이 그대로 검색어가 됩니다. 그 관심사도 다른 것들과 똑같이 한 장씩 쌓입니다.
-            </p>
-            <form className="ob-add" onSubmit={addCustom}>
-              <input
-                className="input"
-                placeholder="예: 레고, 홈서버, F1, 등산화"
-                value={draft}
-                maxLength={40}
-                onChange={(e) => setDraft(e.target.value)}
-              />
-              <button type="submit" className="ob-add-btn" disabled={!draft.trim()}>
-                추가
-              </button>
-            </form>
-            {custom.length > 0 && (
-              <div className="ob-grid">
-                {custom.map((c) => (
-                  <button
-                    key={c.key}
-                    type="button"
-                    className="ob-card"
-                    data-on=""
-                    onClick={() => setCustom((prev) => prev.filter((x) => x.key !== c.key))}
-                  >
-                    <span className="lb">{c.label}</span>
-                    <span className="ht">직접 추가 · 누르면 뺍니다</span>
-                    <span className="mk" aria-hidden>
-                      ✓
-                    </span>
-                  </button>
-                ))}
-              </div>
-            )}
-          </section>
+          <TopicPicker
+            picked={picked}
+            custom={custom}
+            onToggle={toggle}
+            onAddCustom={(t) => setCustom((c) => [...c, t])}
+            onRemoveCustom={(k) => setCustom((c) => c.filter((x) => x.key !== k))}
+          />
 
           {total === 0 && <p className="ob-warn">하나는 골라야 큐가 채워집니다.</p>}
         </>
@@ -171,22 +94,7 @@ export default function OnboardingPage() {
           <p className="hero-sub">
             한 장에 담을 항목 수입니다. 적게 고를수록 더 많이 버립니다 — 버리는 게 이 봇의 일입니다.
           </p>
-          <div className="ob-amounts">
-            {AMOUNTS.map((a) => (
-              <button
-                key={a.value}
-                type="button"
-                className="ob-amount"
-                data-on={pickMax === a.value ? "" : undefined}
-                aria-pressed={pickMax === a.value}
-                onClick={() => setPickMax(a.value)}
-              >
-                <span className="num">{a.value}</span>
-                <span className="lb">{a.label}</span>
-                <span className="nt">{a.note}</span>
-              </button>
-            ))}
-          </div>
+          <AmountPicker value={pickMax} onChange={setPickMax} />
         </>
       ),
       next: "다음",
