@@ -151,6 +151,15 @@ async function runModule(mod: SourceModule, pickMax: number): Promise<ModuleOutc
   // 훑은 수로 되돌아가는 폴백은 두지 않는다. 본문이 잘려 불릿이 하나도 없는
   // 장에 "40건"이 찍히는 걸 실제로 봤다 — 0이면 0이라고 하는 게 맞다.
   const shown = parseItems(content);
+
+  // 항목이 하나도 안 남았으면 카드를 만들지 않는다.
+  //
+  // 모델이 전부 걸러 냈을 때 SKIP을 안 쓰고 리드 문단만 써 보내는 경우가 있다
+  // (실측: 신규가 학원 광고 한 건뿐이던 회차에 항목 0개짜리 카드가 생겼다).
+  // 큐에 올라온 이상 읽어야 할 것처럼 보이는데 열면 아무것도 없다 — 없으면
+  // 아무것도 안 쌓는다는 원칙이 여기서도 같아야 한다.
+  if (shown.length === 0) return { status: "skipped_by_model", sources };
+
   const picked = pickedItems(fresh, content);
 
   const briefingId = await insertBriefing({
