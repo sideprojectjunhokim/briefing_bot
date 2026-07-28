@@ -1,7 +1,7 @@
 "use client";
 
 import { FormEvent, useState } from "react";
-import { TOPICS, TOPIC_GROUPS, customKey } from "@/lib/topics";
+import { TOPICS, TOPIC_GROUPS, customKey, starredPickMax } from "@/lib/topics";
 import type { CustomTopic } from "@/lib/onboarding";
 
 interface Props {
@@ -9,6 +9,8 @@ interface Props {
   custom: CustomTopic[];
   /** 별표 — 더 많이 받기로 한 것 */
   starred: string[];
+  /** 별표 안 한 것의 기본 상한. 별을 눌렀을 때 몇 개가 되는지 보여 주려고 받는다 */
+  pickMax: number;
   onToggle: (key: string) => void;
   onToggleStar: (key: string) => void;
   onAddCustom: (t: CustomTopic) => void;
@@ -26,6 +28,7 @@ function Card({
   hint,
   on,
   starred,
+  starMax,
   onToggle,
   onToggleStar,
 }: {
@@ -33,6 +36,7 @@ function Card({
   hint: string;
   on: boolean;
   starred: boolean;
+  starMax: number;
   onToggle: () => void;
   onToggleStar?: () => void;
 }) {
@@ -59,8 +63,8 @@ function Card({
           className="ob-star"
           data-on={starred ? "" : undefined}
           aria-pressed={starred}
-          aria-label={`${label} ${starred ? "별표 빼기" : "별표 — 더 많이 받기"}`}
-          title={starred ? "별표 빼기" : "더 많이 받기"}
+          aria-label={`${label} ${starred ? "별표 빼기" : `별표 — ${starMax}개까지 받기`}`}
+          title={starred ? "별표 빼기" : `별표 — ${starMax}개까지 받기`}
           onClick={onToggleStar}
         >
           ★
@@ -80,11 +84,13 @@ export function TopicPicker({
   picked,
   custom,
   starred,
+  pickMax,
   onToggle,
   onToggleStar,
   onAddCustom,
   onRemoveCustom,
 }: Props) {
+  const starMax = starredPickMax(pickMax);
   const [draft, setDraft] = useState("");
 
   const add = (e: FormEvent) => {
@@ -112,6 +118,7 @@ export function TopicPicker({
                 hint={t.hint}
                 on={picked.includes(t.key)}
                 starred={starred.includes(t.key)}
+                starMax={starMax}
                 onToggle={() => onToggle(t.key)}
                 onToggleStar={() => onToggleStar(t.key)}
               />
@@ -146,6 +153,7 @@ export function TopicPicker({
                 hint="직접 추가 · 누르면 뺍니다"
                 on
                 starred={starred.includes(c.key)}
+                starMax={starMax}
                 onToggle={() => onRemoveCustom(c.key)}
                 onToggleStar={() => onToggleStar(c.key)}
               />

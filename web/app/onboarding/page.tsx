@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { FloatingBackdrop } from "@/components/fx/FloatingBackdrop";
-import { TOPICS } from "@/lib/topics";
+import { TOPICS, starredPickMax } from "@/lib/topics";
 import { saveSetup, type CustomTopic } from "@/lib/onboarding";
 import { TopicPicker, AmountPicker } from "@/components/TopicPicker";
 
@@ -74,6 +74,7 @@ export default function OnboardingPage() {
             picked={picked}
             custom={custom}
             starred={starred}
+            pickMax={pickMax}
             onToggle={toggle}
             onToggleStar={(k) =>
               setStarred((s) => (s.includes(k) ? s.filter((x) => x !== k) : [...s, k]))
@@ -98,6 +99,8 @@ export default function OnboardingPage() {
           </h1>
           <p className="hero-sub">
             한 장에 담을 항목 수입니다. 적게 고를수록 더 많이 버립니다 — 버리는 게 이 봇의 일입니다.
+            <br />
+            앞에서 별표(★)를 붙인 관심사는 {starredPickMax(pickMax)}개까지 받습니다.
           </p>
           <AmountPicker value={pickMax} onChange={setPickMax} />
         </>

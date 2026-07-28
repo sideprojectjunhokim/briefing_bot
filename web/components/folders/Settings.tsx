@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import type { CurrentSetup, IndexEntry } from "@/lib/db";
 import type { CustomTopic } from "@/lib/onboarding";
 import { TopicPicker, AmountPicker } from "@/components/TopicPicker";
+import { starredPickMax } from "@/lib/topics";
 import { Shell } from "./Shell";
 
 /**
@@ -71,6 +72,7 @@ export function Settings({ current, index, demo }: { current: CurrentSetup; inde
             picked={picked}
             custom={custom}
             starred={starred}
+            pickMax={pickMax}
             onToggleStar={(k) =>
               setStarred((s) => (s.includes(k) ? s.filter((x) => x !== k) : [...s, k]))
             }
@@ -85,6 +87,8 @@ export function Settings({ current, index, demo }: { current: CurrentSetup; inde
             <h2 className="ob-group-head">한 번에 몇 개까지</h2>
             <p className="ob-note">
               한 장에 담을 항목 수입니다. 적게 고를수록 더 많이 버립니다.
+              <br />
+              <strong>별표(★)를 붙인 관심사는 {starredPickMax(pickMax)}개까지</strong> 받습니다.
             </p>
             <AmountPicker value={pickMax} onChange={setPickMax} />
           </section>

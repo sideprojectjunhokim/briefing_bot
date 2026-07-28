@@ -58,6 +58,24 @@ export function presetOf(key: string): TopicPreset | undefined {
   return TOPICS.find((t) => t.key === key);
 }
 
+/**
+ * 별표를 붙이면 한 장에 몇 개까지 받나.
+ *
+ * 기본이 3일 때 9개가 되게 잡았다. 두 배(6)로는 "더 많이"라는 느낌이 안 나고,
+ * 그렇다고 9로 고정하면 나중에 기본을 12로 올렸을 때 별표한 쪽이 오히려 적어진다.
+ * 그래서 **하한 9와 두 배 중 큰 쪽**을 쓴다.
+ *
+ * 20이 천장이다. 한 장이 스무 줄을 넘어가면 그건 읽을거리가 아니라 목록이다.
+ *
+ * 서버·클라이언트가 같이 쓰는 값이라 여기 둔다(lib/db.ts에 두면 화면이
+ * Postgres 드라이버를 끌고 들어온다).
+ */
+export const STARRED_FLOOR = 9;
+
+export function starredPickMax(base: number): number {
+  return Math.min(20, Math.max(STARRED_FLOOR, base * 2));
+}
+
 /** curated = 코드에 소스가 있는 것. 나머지는 검색으로 채운다 */
 export function isCurated(t: TopicPreset): boolean {
   return !t.query;

@@ -7,6 +7,7 @@
 // 드라이버 버전에 따라 있고 없고 해서, 컬럼 목록을 상수로 빼는 것보다 그냥
 // 매번 나열하는 쪽을 골랐다.
 import { neon } from "@neondatabase/serverless";
+import { starredPickMax } from "./topics";
 
 const url = process.env.DATABASE_URL;
 export const hasDb = Boolean(url);
@@ -204,15 +205,6 @@ export interface CurrentSetup {
   pickMax: number;
 }
 
-/**
- * 별표를 붙이면 몇 개까지 받나.
- *
- * 기본의 두 배로 잡되 20을 넘기지 않는다. "더 많이"가 뜻이 있으려면 눈에 띄게
- * 달라야 하고, 그렇다고 한 장이 스무 줄을 넘어가면 그건 읽을거리가 아니라 목록이다.
- */
-export function starredPickMax(base: number): number {
-  return Math.min(20, base * 2);
-}
 
 /** 설정 화면이 지금 상태를 그대로 띄우려고 읽는다 */
 export async function getCurrentSetup(): Promise<CurrentSetup> {
