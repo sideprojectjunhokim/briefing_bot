@@ -1030,6 +1030,9 @@ body {
   color: var(--ds-gray);
 }
 
+/* 안 된 것은 눈에 띄어야 한다 — 못 읽었는데 읽은 줄 알면 그게 제일 나쁘다 */
+.chat-actions li:not([data-ok]) { color: var(--ds-ink); }
+
 .chat-form { display: flex; gap: 0.5rem; }
 .chat-form .input { margin-bottom: 0; }
 .chat-send {

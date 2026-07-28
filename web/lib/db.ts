@@ -380,6 +380,38 @@ export async function listTopicsForChat(): Promise<
   ];
 }
 
+export interface ChatStatus {
+  lastCollectedAt: string | null;
+  unread: number;
+  /** 관심사별 마지막 카드 시각 */
+  lastCards: { module_key: string; at: string }[];
+  /** 최근 2시간 안에 새로 들어온 기사 수 (관심사 전체) */
+  freshLast2h: number;
+}
+
+/**
+ * 대화창이 "왜 새 게 없냐"에 답하려면 지금 상태를 알아야 한다.
+ *
+ * 이게 없으면 자기 앱 얘긴데 "난 앱 내부 동작을 확인할 수 없다"고 밀어낸다.
+ * 실제로 그렇게 답하는 걸 보고 붙였다.
+ */
+export async function getChatStatus(): Promise<ChatStatus> {
+  const sql = requireSql();
+  const [c, q, cards, fresh] = await Promise.all([
+    sql`select max(collected_at) as at from source_items`,
+    sql`select count(*)::int as n from briefings where read_at is null and archived_at is null`,
+    sql`select distinct on (module_key) module_key, created_at as at
+        from briefings where kind = 'live' order by module_key, created_at desc`,
+    sql`select count(*)::int as n from source_items where collected_at > now() - interval '2 hours'`,
+  ]);
+  return {
+    lastCollectedAt: (c as { at: string | null }[])[0]?.at ?? null,
+    unread: (q as { n: number }[])[0]?.n ?? 0,
+    lastCards: cards as { module_key: string; at: string }[],
+    freshLast2h: (fresh as { n: number }[])[0]?.n ?? 0,
+  };
+}
+
 /** 카드 하나 — 대화의 바탕이 된다 */
 export async function getBriefing(id: number): Promise<Briefing | null> {
   const sql = requireSql();

@@ -2,7 +2,7 @@
 
 import { FormEvent, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import type { ChatTurn } from "@/lib/chat/agent";
+import type { ChatAction, ChatTurn } from "@/lib/chat/agent";
 
 /**
  * 카드 안과 홈에서 같이 쓰는 대화창.
@@ -25,7 +25,9 @@ function Rendered({ text }: { text: string }) {
   return (
     <>
       {text.split("\n").map((line, i) => {
-        const item = /^\s*[-*]\s+(.*)$/.exec(line);
+        // 가운뎃점 계열을 다 받는다 — 목록을 쓰라고만 했지 기호를 못 박지 않아서
+        // 한글 가운뎃점(ㆍ)까지 섞여 나온다. 안 걸리면 들여쓰기 없이 문단으로 떨어진다
+        const item = /^\s*[-*·•‧∙ㆍ]\s+(.*)$/.exec(line);
         const body = item ? item[1] : line;
         const parts = body.split(/\*\*(.+?)\*\*/g);
         const nodes = parts.map((p, j) => (j % 2 ? <strong key={j}>{p}</strong> : p));
@@ -47,7 +49,7 @@ export function Chat({
   compact?: boolean;
 }) {
   const router = useRouter();
-  const [turns, setTurns] = useState<(ChatTurn & { actions?: string[] })[]>([]);
+  const [turns, setTurns] = useState<(ChatTurn & { actions?: ChatAction[] })[]>([]);
   const [draft, setDraft] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -80,7 +82,7 @@ export function Chat({
       return;
     }
 
-    const data = (await res.json()) as { reply: string; actions: string[] };
+    const data = (await res.json()) as { reply: string; actions: ChatAction[] };
     setTurns((t) => [...t, { role: "assistant", content: data.reply, actions: data.actions }]);
     // 관심사를 바꿨을 수 있다 — 사이드바 숫자와 색인을 다시 읽는다
     if (data.actions?.length) router.refresh();
@@ -96,7 +98,9 @@ export function Chat({
               {t.actions && t.actions.length > 0 && (
                 <ul className="chat-actions">
                   {t.actions.map((a, j) => (
-                    <li key={j}>✓ {a}</li>
+                    <li key={j} data-ok={a.ok ? "" : undefined}>
+                      {a.ok ? "✓" : "✕"} {a.text}
+                    </li>
                   ))}
                 </ul>
               )}

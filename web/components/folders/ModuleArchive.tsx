@@ -9,6 +9,7 @@ import { dateOf, timeOf } from "@/lib/briefing";
 import { formatReadTime } from "@/lib/collect/readtime";
 import { FileBody } from "./FileBody";
 import { Shell } from "./Shell";
+import { Chat } from "../Chat";
 
 /**
  * 모듈 하나의 지난 장들.
@@ -93,6 +94,8 @@ export function ModuleArchive({
                         <div className="ar-body">
                           {b.thread_note && <p className="fs-thread lead">↩ {b.thread_note}</p>}
                           <FileBody briefing={b} meta={meta} />
+                          {/* 지난 장에서도 물을 수 있어야 한다 — 오히려 여기가 더 자주 궁금하다 */}
+                          <Chat cardId={b.id} placeholder="이 문서에 대해 물어보기" />
                         </div>
                       )}
                     </li>
