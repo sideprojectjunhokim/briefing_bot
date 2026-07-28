@@ -46,13 +46,18 @@
 
 ## 4. 소스 확장 (모듈·소스 독립)
 
-지금 실제로 붙어 있는 건 `technews/geeknews` 하나뿐이다. 나머지는 틀만 있고 `enabled:false`다.
+손으로 붙인 소스는 `technews`(GeekNews + Hacker News)뿐이고, 나머지 세 모듈은 아직 틀만 있다.
+그 밖의 관심사는 전부 검색(Google 뉴스 RSS)으로 채운다 — 프리셋 22개든 직접 친 것이든 같은 경로다.
 소스는 **쉬운 것부터 하나씩 추가하고 실측한다**(C-10). 붙는 것만 유지, 막히면 `enabled=false`.
+
+> **중요도 신호가 소스마다 다르다.** Hacker News만 `points`·`comments`를 실제 숫자로 준다.
+> Google 뉴스는 아무것도 안 줘서 "몇 개 매체가 같은 사건을 다뤘나"(coverage)를 계산해 대용으로 쓴다.
+> GeekNews는 둘 다 없어 제목·본문으로만 판단한다. 새 소스를 붙일 땐 이 셋 중 어디에 해당하는지 먼저 정한다.
 
 - [ ] `hotdeal`: 뽐뿌 RSS → 퀘이사존 → 루리웹핫딜
 - [ ] `market`: Upbit ticker + 지수(D-3) — template 렌더 유지
 - [ ] `community`: 클리앙 → 루리웹 → 보배드림 → (방어 강함) 에펨·더쿠
-- [ ] `technews` 2번째 소스: Hacker News (Algolia API, 영문 → 한국어 요약)
+- [x] `technews` 2번째 소스: Hacker News (Algolia API) — **완료 07-28.** points·comments가 실제 숫자로 오는 유일한 소스
 
 ## 5. 며칠 써 보고 조정
 
