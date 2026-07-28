@@ -139,6 +139,31 @@ export async function getSkipNudge(): Promise<SkipNudge | null> {
   return rows[0] ?? null;
 }
 
+/**
+ * 온보딩에서 고른 값을 module_prefs에 반영한다.
+ *
+ * 고르지 않은 모듈은 muted가 된다 — 수집 자체를 건너뛰므로 LLM 호출도 안 나간다.
+ * nudged_at은 건드리지 않는다. 여기서 찍으면 "물어보고 답 받았다"가 되어
+ * 건너뛰기 알림이 2주 동안 안 뜬다.
+ */
+export async function applySetup(picked: string[], pickMax: number): Promise<void> {
+  const sql = requireSql();
+  const keys = MODULE_KEYS;
+  const muted = keys.map((k) => !picked.includes(k));
+  const maxes = keys.map(() => pickMax);
+  await sql`
+    insert into module_prefs (module_key, pick_max, muted, updated_at)
+    select k, m, mu, now()
+    from unnest(${keys}::text[], ${maxes}::int[], ${muted}::boolean[]) as x(k, m, mu)
+    on conflict (module_key) do update
+      set pick_max = excluded.pick_max,
+          muted = excluded.muted,
+          updated_at = now()`;
+}
+
+/** 수집 모듈 키. lib/modules.ts의 MODULE_ORDER와 같아야 한다 */
+const MODULE_KEYS = ["hotdeal", "market", "technews", "community"];
+
 /** 답을 받았다. 줄이거나, 아예 끄거나, 그대로 두거나. */
 export async function answerNudge(
   moduleKey: string,

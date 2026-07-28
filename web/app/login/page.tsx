@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { motion, useAnimationControls, useReducedMotion } from "motion/react";
 import { FloatingBackdrop } from "@/components/fx/FloatingBackdrop";
 import { markArrive, setUser } from "@/lib/session";
+import { consumeSetup } from "@/lib/onboarding";
 
 /** 온보딩에서 종이가 화면을 덮은 채 도착 — 오버레이가 걷히며 로그인이 드러난다. */
 function ArrivalSweep() {
@@ -65,6 +66,17 @@ function LoginInner() {
       setError(res?.status === 401 ? "비밀번호가 다릅니다." : "지금은 열 수 없습니다.");
       shake();
       return;
+    }
+
+    // 온보딩에서 고른 값은 여기서 반영한다 — 그 화면은 로그인 전이라
+    // 서버에 못 썼다. 실패해도 진행은 막지 않는다(기본값으로 돌면 된다).
+    const setup = consumeSetup();
+    if (setup) {
+      await fetch("/api/prefs/setup", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(setup),
+      }).catch(() => {});
     }
 
     setUser(trimmed);

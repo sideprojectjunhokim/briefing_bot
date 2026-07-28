@@ -36,16 +36,17 @@
 
 * { box-sizing: border-box; }
 
+/* 기본색도 종이여야 한다. 예전엔 여기가 다크(#0e0f13 / #e7e9ee)로 남아 있었고,
+   화면 요소들이 저마다 색을 덮어써서 티가 안 났다. 그러다 색을 명시하지 않은
+   요소를 새로 만들면 흰 글자가 종이 위에 얹혀 그냥 사라진다(온보딩 요약이 그랬다). */
 body {
   margin: 0;
-  background: #0e0f13;
-  color: #e7e9ee;
+  background: var(--ds-ground);
+  color: var(--ds-ink);
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
     "Apple SD Gothic Neo", "Noto Sans KR", sans-serif;
   line-height: 1.6;
 }
-
-/* ═══ 온보딩·로그인 (다크 스테이지 — 메인 리디자인 승인 후 종이 룩 통일 예정) ═══ */
 
 /* ── 온보딩·로그인 ──────────────────────────────────────────────────────
    전부 --ds-* 토큰으로 돌린다. 예전 값들(#161820 배경, #2563eb 그라디언트 알약)은
@@ -559,6 +560,141 @@ body {
   text-align: center;
   font-style: italic;
   color: var(--ds-gray);
+}
+
+/* ── 온보딩 스텝 ── */
+/* 히어로는 가운데 놓인 블록이고 글은 그 안에서 왼쪽 정렬이다(.hero 기본).
+   스텝 요소도 그 정렬을 따라야 한다 — 칩만 가운데로 모으면 축이 두 개가 된다. */
+.ob-hero { max-width: 36rem; }
+.ob-hero .hero-title { margin-bottom: 0.9rem; }
+.ob-hero .hero-sub { margin-bottom: 0; max-width: 34rem; }
+
+.ob-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+  margin-top: 1.8rem;
+}
+/* 칩도 서류철 탭이다 — 모서리를 같은 각도로 깎아 같은 어휘 안에 둔다 */
+.ob-chip {
+  appearance: none;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.15rem;
+  padding: 0.7rem 1.4rem;
+  background: var(--ds-paper);
+  border: 1px solid var(--ds-line);
+  color: var(--ds-gray);
+  clip-path: polygon(4% 0, 96% 0, 100% 100%, 0 100%);
+  transition: background 0.16s ease, color 0.16s ease, border-color 0.16s ease;
+}
+.ob-chip .en { font-family: var(--ds-display); font-size: 0.9rem; letter-spacing: 0.05em; }
+.ob-chip .kr { font-family: var(--ds-mono); font-size: 0.6rem; }
+.ob-chip:hover { border-color: var(--ds-ink); color: var(--ds-ink); }
+.ob-chip[data-on] { background: var(--ds-ink); border-color: var(--ds-ink); color: var(--ds-paper); }
+.ob-chip:focus-visible { outline: 2px solid var(--ds-royal); outline-offset: 3px; }
+
+.ob-warn {
+  margin: 1rem 0 0;
+  font-family: var(--ds-mono);
+  font-size: 0.68rem;
+  color: var(--ds-red);
+}
+
+.ob-amounts {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 0.7rem;
+  margin-top: 1.8rem;
+  text-align: left;
+}
+.ob-amount {
+  appearance: none;
+  cursor: pointer;
+  background: var(--ds-paper);
+  border: 1px solid var(--ds-line);
+  border-radius: 3px;
+  padding: 1rem 1.1rem 1.1rem;
+  color: var(--ds-ink);
+  transition: border-color 0.16s ease, background 0.16s ease;
+}
+.ob-amount .num {
+  display: block;
+  font-family: var(--ds-display);
+  font-size: 1.9rem;
+  line-height: 1;
+}
+.ob-amount .lb { display: block; margin-top: 0.35rem; font-size: 0.95rem; }
+.ob-amount .nt {
+  display: block;
+  margin-top: 0.3rem;
+  font-family: var(--ds-mono);
+  font-size: 0.62rem;
+  line-height: 1.5;
+  color: var(--ds-gray);
+}
+.ob-amount:hover { border-color: var(--ds-ink); }
+.ob-amount[data-on] { border-color: var(--ds-ink); background: var(--ds-paper-2); }
+.ob-amount[data-on] .num { color: var(--ds-royal); }
+.ob-amount:focus-visible { outline: 2px solid var(--ds-royal); outline-offset: 3px; }
+
+.ob-summary {
+  margin: 1.8rem 0 0;
+  text-align: left;
+  border-top: 1px solid var(--ds-line);
+}
+.ob-summary > div {
+  display: flex;
+  gap: 1.2rem;
+  padding: 0.85rem 0;
+  border-bottom: 1px solid var(--ds-line);
+}
+.ob-summary dt {
+  flex: 0 0 5.5rem;
+  font-family: var(--ds-mono);
+  font-size: 0.66rem;
+  letter-spacing: 0.08em;
+  color: var(--ds-gray);
+  padding-top: 0.2rem;
+}
+.ob-summary dd { margin: 0; font-size: 1.02rem; line-height: 1.5; }
+
+.ob-nav {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-top: 2.4rem;
+}
+.ob-back {
+  appearance: none;
+  background: none;
+  border: 0;
+  cursor: pointer;
+  font-family: var(--ds-mono);
+  font-size: 0.68rem;
+  letter-spacing: 0.06em;
+  color: var(--ds-gray);
+  padding: 0.4rem 0;
+}
+.ob-back:hover { color: var(--ds-ink); }
+.ob-nav .btn-primary:disabled { opacity: 0.4; cursor: default; }
+.ob-nav .btn-primary:disabled:hover { background: var(--ds-paper); color: var(--ds-ink); transform: none; }
+
+.ob-dots { display: flex; gap: 0.4rem; }
+.ob-dots span {
+  width: 0.4rem;
+  height: 0.4rem;
+  border-radius: 50%;
+  background: var(--ds-line);
+  transition: background 0.2s ease, transform 0.2s ease;
+}
+.ob-dots span[data-on] { background: var(--ds-ink); transform: scale(1.3); }
+
+@media (max-width: 560px) {
+  .ob-amounts { grid-template-columns: 1fr; }
 }
 
 /* ── 큐 (안 읽은 것) ── */
