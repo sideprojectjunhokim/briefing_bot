@@ -254,7 +254,8 @@ export async function getCurrentSetup(): Promise<CurrentSetup> {
   const sql = requireSql();
   const [prefRows, topicRows] = await Promise.all([
     sql`select module_key, muted, pick_max, starred from module_prefs`,
-    sql`select key, label, custom, pick_max, starred from topics where enabled = true order by created_at`,
+    // 꺼진 것도 가져온다 — 직접 추가한 관심사를 다시 켜려면 목록에 있어야 한다
+    sql`select key, label, custom, pick_max, starred, enabled from topics order by created_at`,
   ]);
   const prefs = prefRows as {
     module_key: string;
@@ -268,6 +269,7 @@ export async function getCurrentSetup(): Promise<CurrentSetup> {
     custom: boolean;
     pick_max: number;
     starred: boolean;
+    enabled: boolean;
   }[];
 
   // 아직 아무것도 저장 안 됐으면(온보딩 전) 코드 모듈은 전부 켜진 것으로 본다
@@ -275,17 +277,22 @@ export async function getCurrentSetup(): Promise<CurrentSetup> {
     ? prefs.filter((p) => !p.muted).map((p) => p.module_key)
     : MODULE_LABELS.map((m) => m.key);
 
-  // 기본 상한은 별표 **안 한** 것에서 읽는다. 별표한 건 두 배로 부풀려 저장돼
-  // 있어서, 그걸 읽으면 저장할 때마다 상한이 계속 두 배씩 커진다.
+  // 기본 상한은 별표 **안 한** 것에서 읽는다. 별표한 건 부풀려 저장돼 있어서,
+  // 그걸 읽으면 저장할 때마다 상한이 계속 커진다.
   const base =
-    topics.find((t) => !t.starred)?.pick_max ?? prefs.find((p) => !p.starred)?.pick_max ?? 8;
+    topics.find((t) => t.enabled && !t.starred)?.pick_max ??
+    prefs.find((p) => !p.starred)?.pick_max ??
+    8;
 
   return {
-    keys: [...curated, ...topics.filter((t) => !t.custom).map((t) => t.key)],
+    // keys = 지금 켜져 있는 것 (커스텀도 포함해야 카드가 켜진 것으로 그려진다)
+    keys: [...curated, ...topics.filter((t) => t.enabled).map((t) => t.key)],
+    // custom = 꺼진 것까지 전부. 다시 켜려면 목록에 있어야 한다
     custom: topics.filter((t) => t.custom).map((t) => ({ key: t.key, label: t.label })),
+    // 켜져 있는 커스텀도 keys에 넣어야 카드가 켜진 것으로 그려진다
     starred: [
       ...prefs.filter((p) => p.starred && !p.muted).map((p) => p.module_key),
-      ...topics.filter((t) => t.starred).map((t) => t.key),
+      ...topics.filter((t) => t.enabled && t.starred).map((t) => t.key),
     ],
     pickMax: base,
   };
@@ -296,6 +303,17 @@ export interface SetupTopic {
   label: string;
   query: string;
   custom: boolean;
+  /**
+   * 꺼진 관심사도 행은 남긴다. 직접 추가한 것은 코드에 목록이 없어서,
+   * 지워 버리면 다시 켤 방법이 없고 이름을 또 쳐야 한다.
+   */
+  enabled: boolean;
+}
+
+/** 관심사를 완전히 지운다 — 직접 추가한 것만. 프리셋은 끄기만 한다 */
+export async function deleteTopic(key: string): Promise<void> {
+  const sql = requireSql();
+  await sql`delete from topics where key = ${key} and custom = true`;
 }
 
 export async function applySetup(
@@ -325,26 +343,40 @@ export async function applySetup(
           starred = excluded.starred,
           updated_at = now()`;
 
-  // 검색 관심사 — 고른 것만 켜고 나머지는 끈다(지우지 않는다. 지우면
-  // 다시 켰을 때 예전에 본 것들이 전부 새 소식으로 되살아난다)
-  const picked = topics.map((t) => t.key);
-  await sql`update topics set enabled = false where key <> all(${picked}::text[])`;
-  if (topics.length === 0) return;
+  // 검색 관심사. 목록에 없는 건 끈다 — **지우지 않는다.** 지우면 이미 본 기사
+  // 기록(source_items)과의 연결이 흐려지고, 직접 추가한 것은 다시 켤 수도 없다.
+  const all = topics.map((t) => t.key);
+  await sql`update topics set enabled = false where key <> all(${all}::text[])`;
 
+  if (topics.length > 0) {
+    await sql`
+      insert into topics (key, label, query, custom, pick_max, starred, enabled)
+      select k, l, q, c, m, st, en
+      from unnest(
+        ${all}::text[], ${topics.map((t) => t.label)}::text[],
+        ${topics.map((t) => t.query)}::text[], ${topics.map((t) => t.custom)}::boolean[],
+        ${topics.map((t) => maxFor(t.key))}::int[], ${topics.map((t) => star.has(t.key))}::boolean[],
+        ${topics.map((t) => t.enabled)}::boolean[]
+      ) as x(k, l, q, c, m, st, en)
+      on conflict (key) do update
+        set label = excluded.label,
+            query = excluded.query,
+            pick_max = excluded.pick_max,
+            starred = excluded.starred,
+            enabled = excluded.enabled`;
+  }
+
+  // 끈 관심사의 안 읽은 카드는 큐에서 내린다.
+  //
+  // "이제 이건 안 볼래"인데 그 카드가 큐에 계속 서 있으면 끈 게 아니다.
+  // 지우지는 않으므로 /c/<키>에 그대로 남아 있고, 나중에 다시 켜도 이 카드들이
+  // 되살아나진 않는다 — 다시 켠다는 건 "앞으로 받겠다"는 뜻이지
+  // "지난 걸 밀린 숙제로 받겠다"는 뜻이 아니다.
+  const live = [...pickedModules, ...topics.filter((t) => t.enabled).map((t) => t.key)];
   await sql`
-    insert into topics (key, label, query, custom, pick_max, starred, enabled)
-    select k, l, q, c, m, st, true
-    from unnest(
-      ${picked}::text[], ${topics.map((t) => t.label)}::text[],
-      ${topics.map((t) => t.query)}::text[], ${topics.map((t) => t.custom)}::boolean[],
-      ${topics.map((t) => maxFor(t.key))}::int[], ${topics.map((t) => star.has(t.key))}::boolean[]
-    ) as x(k, l, q, c, m, st)
-    on conflict (key) do update
-      set label = excluded.label,
-          query = excluded.query,
-          pick_max = excluded.pick_max,
-          starred = excluded.starred,
-          enabled = true`;
+    update briefings set archived_at = now()
+    where kind = 'live' and read_at is null and archived_at is null
+      and module_key <> all(${live}::text[])`;
 }
 
 /** 코드에 소스가 있는 모듈 키. lib/modules.ts의 MODULE_ORDER와 같아야 한다 */

@@ -743,6 +743,28 @@ body {
 .ob-star[data-on]:hover { color: var(--ds-royal); }
 .ob-star:focus-visible { outline: 2px solid var(--ds-royal); outline-offset: 2px; border-radius: 2px; }
 
+/* 직접 추가한 관심사는 꺼져도 목록에 남는다(다시 켜려면 있어야 한다).
+   완전히 지우는 ×는 꺼진 뒤에만 나타난다 — 켜진 카드에 삭제까지 붙이면
+   누를 게 셋이라 실수하기 쉽다. */
+.ob-custom { position: relative; display: flex; }
+.ob-custom > .ob-card-wrap { flex: 1; }
+.ob-del {
+  position: absolute;
+  right: 0.4rem;
+  bottom: 0.35rem;
+  appearance: none;
+  cursor: pointer;
+  background: none;
+  border: 0;
+  padding: 0.1rem 0.35rem;
+  font-size: 1.1rem;
+  line-height: 1;
+  color: var(--ds-gray);
+  transition: color 0.12s ease;
+}
+.ob-del:hover { color: var(--ds-red); }
+.ob-del:focus-visible { outline: 2px solid var(--ds-red); outline-offset: 2px; border-radius: 2px; }
+
 .ob-note {
   margin: 0 0 0.8rem;
   font-family: var(--ds-serif);

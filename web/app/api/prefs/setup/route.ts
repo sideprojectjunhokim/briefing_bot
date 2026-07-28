@@ -24,7 +24,8 @@ export async function POST(req: Request) {
   const topics: SetupTopic[] = [];
   for (const k of keys) {
     const p = presetOf(k);
-    if (p && !isCurated(p)) topics.push({ key: p.key, label: p.label, query: p.query!, custom: false });
+    if (p && !isCurated(p))
+      topics.push({ key: p.key, label: p.label, query: p.query!, custom: false, enabled: true });
   }
 
   // 직접 친 관심사. 검색어는 라벨 그대로 쓴다 — 사용자가 아는 말이 곧 검색어다
@@ -35,12 +36,13 @@ export async function POST(req: Request) {
       if (typeof key !== "string" || typeof label !== "string") continue;
       const trimmed = label.trim().slice(0, 40);
       if (!trimmed || !key.startsWith("my-")) continue;
-      topics.push({ key, label: trimmed, query: trimmed, custom: true });
+      // 꺼진 커스텀도 행을 남긴다 — 지우면 다시 켤 방법이 없다
+      topics.push({ key, label: trimmed, query: trimmed, custom: true, enabled: keys.includes(key) });
     }
   }
 
   // 하나도 안 고른 상태를 반영하면 큐가 영영 빈다
-  if (pickedModules.length === 0 && topics.length === 0) {
+  if (pickedModules.length === 0 && topics.filter((t) => t.enabled).length === 0) {
     return NextResponse.json({ error: "관심사를 하나 이상 골라야 합니다" }, { status: 400 });
   }
   if (!Number.isInteger(pickMax) || pickMax < 1 || pickMax > 20) {

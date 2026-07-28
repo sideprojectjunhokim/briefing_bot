@@ -79,8 +79,15 @@ export default function OnboardingPage() {
             onToggleStar={(k) =>
               setStarred((s) => (s.includes(k) ? s.filter((x) => x !== k) : [...s, k]))
             }
-            onAddCustom={(t) => setCustom((c) => [...c, t])}
-            onRemoveCustom={(k) => setCustom((c) => c.filter((x) => x.key !== k))}
+            onAddCustom={(t) => {
+              setCustom((c) => [...c, t]);
+              setPicked((p) => [...p, t.key]); // 방금 추가한 건 켜진 채로 시작한다
+            }}
+            onRemoveCustom={(k) => {
+              setCustom((c) => c.filter((x) => x.key !== k));
+              setPicked((p) => p.filter((x) => x !== k));
+              setStarred((s) => s.filter((x) => x !== k));
+            }}
           />
 
           {total === 0 && <p className="ob-warn">하나는 골라야 큐가 채워집니다.</p>}

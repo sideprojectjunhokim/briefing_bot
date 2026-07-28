@@ -153,18 +153,35 @@ export function TopicPicker({
         </form>
         {custom.length > 0 && (
           <div className="ob-grid">
-            {custom.map((c) => (
-              <Card
-                key={c.key}
-                label={c.label}
-                hint="직접 추가 · 누르면 뺍니다"
-                on
-                starred={starred.includes(c.key)}
-                starMax={starMax}
-                onToggle={() => onRemoveCustom(c.key)}
-                onToggleStar={() => onToggleStar(c.key)}
-              />
-            ))}
+            {custom.map((c) => {
+              const on = picked.includes(c.key);
+              return (
+                <div key={c.key} className="ob-custom">
+                  <Card
+                    label={c.label}
+                    hint={on ? "직접 추가" : "꺼짐 · 누르면 다시 켭니다"}
+                    on={on}
+                    starred={starred.includes(c.key)}
+                    starMax={starMax}
+                    onToggle={() => onToggle(c.key)}
+                    onToggleStar={() => onToggleStar(c.key)}
+                  />
+                  {/* 완전히 지우는 건 꺼진 뒤에만 보여 준다. 켜져 있는 카드에
+                      삭제 버튼까지 붙이면 누를 게 셋이라 실수하기 쉽다 */}
+                  {!on && (
+                    <button
+                      type="button"
+                      className="ob-del"
+                      aria-label={`${c.label} 목록에서 지우기`}
+                      title="목록에서 지우기"
+                      onClick={() => onRemoveCustom(c.key)}
+                    >
+                      ×
+                    </button>
+                  )}
+                </div>
+              );
+            })}
           </div>
         )}
       </section>

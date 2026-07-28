@@ -25,14 +25,20 @@ export function Settings({ current, index, demo }: { current: CurrentSetup; inde
   const [pickMax, setPickMax] = useState(current.pickMax);
   const [state, setState] = useState<"idle" | "saving" | "saved" | "error">("idle");
 
-  const dirty =
-    JSON.stringify([[...picked].sort(), custom.map((c) => c.key).sort(), [...starred].sort(), pickMax]) !==
-    JSON.stringify([
-      [...current.keys].sort(),
-      current.custom.map((c) => c.key).sort(),
-      [...current.starred].sort(),
-      current.pickMax,
-    ]);
+  /** 지금 값이 저장된 값과 같은지 볼 기준선. 저장에 성공하면 여기로 옮겨 온다 */
+  const snapshot = (
+    k: string[],
+    c: { key: string }[],
+    s: string[],
+    m: number,
+  ) => JSON.stringify([[...k].sort(), c.map((x) => x.key).sort(), [...s].sort(), m]);
+
+  // current(서버에서 온 값)와 직접 비교하면, 저장 뒤 router.refresh()가 끝날
+  // 때까지 "저장하지 않음"이 떠 있는다 — 저장됐는데 안 된 줄 알게 된다.
+  const [baseline, setBaseline] = useState(() =>
+    snapshot(current.keys, current.custom, current.starred, current.pickMax),
+  );
+  const dirty = snapshot(picked, custom, starred, pickMax) !== baseline;
 
   const total = picked.length + custom.length;
 
@@ -49,6 +55,7 @@ export function Settings({ current, index, demo }: { current: CurrentSetup; inde
       setState("error");
       return;
     }
+    setBaseline(snapshot(picked, custom, starred, pickMax));
     setState("saved");
     router.refresh();
   };
@@ -79,8 +86,15 @@ export function Settings({ current, index, demo }: { current: CurrentSetup; inde
             onToggle={(k) =>
               setPicked((p) => (p.includes(k) ? p.filter((x) => x !== k) : [...p, k]))
             }
-            onAddCustom={(t) => setCustom((c) => [...c, t])}
-            onRemoveCustom={(k) => setCustom((c) => c.filter((x) => x.key !== k))}
+            onAddCustom={(t) => {
+              setCustom((c) => [...c, t]);
+              setPicked((p) => [...p, t.key]); // 방금 추가한 건 켜진 채로 시작한다
+            }}
+            onRemoveCustom={(k) => {
+              setCustom((c) => c.filter((x) => x.key !== k));
+              setPicked((p) => p.filter((x) => x !== k));
+              setStarred((s) => s.filter((x) => x !== k));
+            }}
           />
 
           <section className="ob-group">
