@@ -82,6 +82,29 @@ create table if not exists module_prefs (
 );
 
 -- ─────────────────────────────────────────────────────────────
+-- topics — 검색으로 채우는 관심사.
+--
+-- 손으로 소스를 붙인 모듈(핫딜·시세·테크뉴스·커뮤니티)은 코드에 있고
+-- module_prefs가 관리한다. 그 밖의 관심사는 전부 여기 들어온다 — 프리셋에서
+-- 고른 것이든 사용자가 직접 친 것이든 같은 경로다. "직접 추가"를 특별
+-- 케이스로 만들면 그것만 계속 깨진다.
+--
+-- 채우는 방법은 검색 한 가지다(Google 뉴스 RSS). 임의 키워드에 붙고,
+-- 키가 필요 없고, 돈이 안 든다.
+-- ─────────────────────────────────────────────────────────────
+create table if not exists topics (
+  key        text primary key,               -- briefings.module_key로 그대로 쓴다
+  label      text not null,                  -- 화면에 보이는 이름
+  query      text not null,                  -- 검색어
+  custom     boolean not null default false, -- 사용자가 직접 친 것인가
+  pick_max   int     not null default 5,     -- 한 장에 담을 항목 상한
+  enabled    boolean not null default true,
+  created_at timestamptz not null default now()
+);
+
+create index if not exists topics_enabled_idx on topics (enabled);
+
+-- ─────────────────────────────────────────────────────────────
 -- 기존 DB에 컬럼만 얹을 때를 위한 보정 (이미 있으면 무시됨)
 -- ─────────────────────────────────────────────────────────────
 alter table briefings add column if not exists kind text not null default 'live';

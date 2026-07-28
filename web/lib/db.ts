@@ -146,10 +146,23 @@ export async function getSkipNudge(): Promise<SkipNudge | null> {
  * nudged_at은 건드리지 않는다. 여기서 찍으면 "물어보고 답 받았다"가 되어
  * 건너뛰기 알림이 2주 동안 안 뜬다.
  */
-export async function applySetup(picked: string[], pickMax: number): Promise<void> {
+export interface SetupTopic {
+  key: string;
+  label: string;
+  query: string;
+  custom: boolean;
+}
+
+export async function applySetup(
+  pickedModules: string[],
+  topics: SetupTopic[],
+  pickMax: number,
+): Promise<void> {
   const sql = requireSql();
+
+  // 코드에 소스가 있는 4모듈 — 고르지 않은 건 muted
   const keys = MODULE_KEYS;
-  const muted = keys.map((k) => !picked.includes(k));
+  const muted = keys.map((k) => !pickedModules.includes(k));
   const maxes = keys.map(() => pickMax);
   await sql`
     insert into module_prefs (module_key, pick_max, muted, updated_at)
@@ -159,9 +172,28 @@ export async function applySetup(picked: string[], pickMax: number): Promise<voi
       set pick_max = excluded.pick_max,
           muted = excluded.muted,
           updated_at = now()`;
+
+  // 검색 관심사 — 고른 것만 켜고 나머지는 끈다(지우지 않는다. 지우면
+  // 다시 켰을 때 예전에 본 것들이 전부 새 소식으로 되살아난다)
+  const picked = topics.map((t) => t.key);
+  await sql`update topics set enabled = false where key <> all(${picked}::text[])`;
+  if (topics.length === 0) return;
+
+  await sql`
+    insert into topics (key, label, query, custom, pick_max, enabled)
+    select k, l, q, c, ${pickMax}, true
+    from unnest(
+      ${picked}::text[], ${topics.map((t) => t.label)}::text[],
+      ${topics.map((t) => t.query)}::text[], ${topics.map((t) => t.custom)}::boolean[]
+    ) as x(k, l, q, c)
+    on conflict (key) do update
+      set label = excluded.label,
+          query = excluded.query,
+          pick_max = excluded.pick_max,
+          enabled = true`;
 }
 
-/** 수집 모듈 키. lib/modules.ts의 MODULE_ORDER와 같아야 한다 */
+/** 코드에 소스가 있는 모듈 키. lib/modules.ts의 MODULE_ORDER와 같아야 한다 */
 const MODULE_KEYS = ["hotdeal", "market", "technews", "community"];
 
 /** 답을 받았다. 줄이거나, 아예 끄거나, 그대로 두거나. */

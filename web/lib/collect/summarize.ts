@@ -8,9 +8,10 @@ import Anthropic from "@anthropic-ai/sdk";
 import type { RawItem } from "./types";
 import { MODELS, type ModelTier } from "./models";
 
-// 리드 문단 + 항목 8줄이면 한국어로 넉넉히 들어간다. 잘리면 카드가 문장 중간에서
-// 끝나 버리므로 조금 여유를 뒀다.
-const MAX_TOKENS = 2000;
+// 요약만 읽고 끝낼 수 있어야 해서 항목당 2~3문장을 쓴다. 8항목이면 한국어로
+// 2,500토큰쯤인데, 모자라면 카드가 문장 중간에서 끊긴다(2000일 때 실제로 그랬다).
+// 상한을 올려도 안 쓴 만큼은 과금되지 않으므로 넉넉히 잡는 편이 낫다.
+const MAX_TOKENS = 4000;
 
 let client: Anthropic | null = null;
 
@@ -50,9 +51,11 @@ export async function summarize(
   systemPrompt: string,
   maxInput: number,
 ): Promise<Summary | typeof SKIPPED> {
-  const clipped = items.slice(0, maxInput).map((it) => ({
+  const used = items.slice(0, maxInput);
+  // url은 안 넘긴다 — 모델은 n으로 가리키고 주소는 아래에서 코드가 붙인다
+  const clipped = used.map((it, i) => ({
+    n: i + 1,
     title: it.title,
-    url: it.url,
     origin: it.origin,
     ...it.payload,
   }));
@@ -64,7 +67,20 @@ export async function summarize(
   );
 
   if (!text || /^SKIP\b/i.test(text)) return SKIPPED;
-  return splitThread(text);
+  return splitThread(attachUrls(text, used));
+}
+
+/**
+ * `(#3)` 자리에 3번 아이템의 실제 주소를 넣는다.
+ *
+ * 범위를 벗어난 번호는 링크를 지우고 제목만 남긴다 — 없는 곳으로 보내는 링크보다
+ * 링크 없는 항목이 낫다.
+ */
+function attachUrls(text: string, items: RawItem[]): string {
+  return text.replace(/\(#(\d+)\)/g, (_, raw: string) => {
+    const url = items[Number(raw) - 1]?.url;
+    return url ? `(${url})` : "";
+  });
 }
 
 /**

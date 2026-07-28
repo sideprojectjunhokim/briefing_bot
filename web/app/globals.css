@@ -564,40 +564,102 @@ body {
 
 /* ── 온보딩 스텝 ── */
 /* 히어로는 가운데 놓인 블록이고 글은 그 안에서 왼쪽 정렬이다(.hero 기본).
-   스텝 요소도 그 정렬을 따라야 한다 — 칩만 가운데로 모으면 축이 두 개가 된다. */
+   스텝 요소도 그 정렬을 따라야 한다 — 카드만 가운데로 모으면 축이 두 개가 된다. */
 .ob-hero { max-width: 36rem; }
 .ob-hero .hero-title { margin-bottom: 0.9rem; }
 .ob-hero .hero-sub { margin-bottom: 0; max-width: 34rem; }
 
-.ob-chips {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.6rem;
-  margin-top: 1.8rem;
+/* 관심사 스텝만 넓다. 카드가 20개 넘게 깔려서 36rem에 밀어 넣으면
+   글자가 줄어들고 결국 "뭔지 보이지도 않는" 상태가 된다 */
+/* width:100%가 같이 있어야 한다. .stage는 place-items:center라 격자 칸의
+   아이템이 내용 크기로 줄어들고, max-width는 상한일 뿐이라 채워지지 않는다
+   (60rem을 줘도 실제 폭이 533px에 머물러 카드가 2열로 깔렸다). */
+.ob-hero[data-wide] { max-width: 60rem; width: 100%; }
+.ob-stage { align-items: start; padding-block: 4.5rem; }
+.ob-hero[data-wide] .hero-title.ob-tight { font-size: clamp(2rem, 3.6vw, 2.6rem); }
+
+.ob-group { margin-top: 2rem; }
+.ob-group-head {
+  font-family: var(--ds-mono);
+  font-size: 0.66rem;
+  letter-spacing: 0.18em;
+  color: var(--ds-gray);
+  margin: 0 0 0.8rem;
+  padding-bottom: 0.5rem;
+  border-bottom: 1px solid var(--ds-line);
 }
-/* 칩도 서류철 탭이다 — 모서리를 같은 각도로 깎아 같은 어휘 안에 둔다 */
-.ob-chip {
+
+.ob-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(15.5rem, 1fr));
+  gap: 0.7rem;
+}
+
+/* 카드는 눌러서 고르는 물건이라 손가락만 하게 크다.
+   예전엔 탭 모양 칩이었는데 라벨이 작아 무엇인지 읽히지 않았다. */
+.ob-card {
+  position: relative;
   appearance: none;
   cursor: pointer;
   display: flex;
   flex-direction: column;
-  align-items: flex-start;
-  gap: 0.15rem;
-  padding: 0.7rem 1.4rem;
+  gap: 0.3rem;
+  text-align: left;
+  min-height: 5.4rem;
+  padding: 1rem 2.4rem 1.05rem 1.1rem;
   background: var(--ds-paper);
   border: 1px solid var(--ds-line);
-  color: var(--ds-gray);
-  clip-path: polygon(4% 0, 96% 0, 100% 100%, 0 100%);
-  transition: background 0.16s ease, color 0.16s ease, border-color 0.16s ease;
+  border-radius: 3px;
+  color: var(--ds-ink);
+  transition: border-color 0.14s ease, background 0.14s ease;
 }
-.ob-chip .en { font-family: var(--ds-display); font-size: 0.9rem; letter-spacing: 0.05em; }
-.ob-chip .kr { font-family: var(--ds-mono); font-size: 0.6rem; }
-.ob-chip:hover { border-color: var(--ds-ink); color: var(--ds-ink); }
-.ob-chip[data-on] { background: var(--ds-ink); border-color: var(--ds-ink); color: var(--ds-paper); }
-.ob-chip:focus-visible { outline: 2px solid var(--ds-royal); outline-offset: 3px; }
+.ob-card .lb { font-family: var(--ds-serif); font-size: 1.08rem; line-height: 1.3; }
+.ob-card .ht {
+  font-family: var(--ds-mono);
+  font-size: 0.63rem;
+  line-height: 1.55;
+  color: var(--ds-gray);
+}
+.ob-card .mk {
+  position: absolute;
+  top: 0.9rem;
+  right: 1rem;
+  font-family: var(--ds-mono);
+  font-size: 0.85rem;
+  color: var(--ds-line);
+}
+.ob-card:hover { border-color: var(--ds-ink); }
+.ob-card[data-on] { border-color: var(--ds-ink); background: var(--ds-paper-2); }
+.ob-card[data-on] .mk { color: var(--ds-royal); }
+.ob-card:focus-visible { outline: 2px solid var(--ds-royal); outline-offset: 3px; }
+
+.ob-note {
+  margin: 0 0 0.8rem;
+  font-family: var(--ds-serif);
+  font-size: 0.9rem;
+  line-height: 1.65;
+  color: var(--ds-gray);
+}
+.ob-add { display: flex; gap: 0.5rem; margin-bottom: 0.9rem; max-width: 32rem; }
+.ob-add .input { margin-bottom: 0; }
+.ob-add-btn {
+  flex: 0 0 auto;
+  appearance: none;
+  cursor: pointer;
+  background: var(--ds-paper);
+  border: 1px solid var(--ds-ink);
+  color: var(--ds-ink);
+  font-family: var(--ds-display);
+  font-size: 0.85rem;
+  letter-spacing: 0.05em;
+  padding: 0 1.4rem;
+  transition: background 0.14s ease, color 0.14s ease;
+}
+.ob-add-btn:hover:not(:disabled) { background: var(--ds-ink); color: var(--ds-paper); }
+.ob-add-btn:disabled { opacity: 0.35; cursor: default; }
 
 .ob-warn {
-  margin: 1rem 0 0;
+  margin: 1.2rem 0 0;
   font-family: var(--ds-mono);
   font-size: 0.68rem;
   color: var(--ds-red);

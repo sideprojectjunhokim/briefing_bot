@@ -3,14 +3,20 @@
  *
  * 온보딩은 로그인 **전** 화면이라 서버에 바로 못 쓴다(미인증 쓰기가 된다).
  * 그래서 여기 담아 뒀다가 로그인 성공 직후에 한 번에 반영한다.
- * 원래 사양(docs/07)도 "선택값은 localStorage에 저장"이었다.
  */
 const KEY = "bb-setup";
 
+export interface CustomTopic {
+  key: string;
+  label: string;
+}
+
 export interface SetupChoice {
-  /** 받기로 한 모듈 키. 여기 없는 모듈은 muted가 된다 */
-  modules: string[];
-  /** 한 장에 담을 항목 상한 (module_prefs.pick_max) */
+  /** 고른 프리셋 관심사 키 (코드 모듈 + 검색 관심사 섞여 있다) */
+  keys: string[];
+  /** 직접 친 관심사 */
+  custom: CustomTopic[];
+  /** 한 장에 담을 항목 상한 */
   pickMax: number;
 }
 
@@ -26,7 +32,8 @@ export function consumeSetup(): SetupChoice | null {
   localStorage.removeItem(KEY);
   try {
     const v = JSON.parse(raw) as SetupChoice;
-    return Array.isArray(v.modules) && typeof v.pickMax === "number" ? v : null;
+    if (!Array.isArray(v.keys) || typeof v.pickMax !== "number") return null;
+    return { keys: v.keys, custom: Array.isArray(v.custom) ? v.custom : [], pickMax: v.pickMax };
   } catch {
     return null;
   }

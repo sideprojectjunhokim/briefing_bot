@@ -25,7 +25,7 @@ export const community: SourceModule = {
         {
           role: "너는 커뮤니티 인기글 큐레이터다. 읽는 사람은 시간을 쓸 값어치가 있는지만 알고 싶다.",
           leadAsk: LEAD_ASK.community,
-          itemFormat: "- [제목](링크) — 제목만으로 모호할 때만 한 줄 부연",
+          itemFormat: "- [제목](#번호) — 그 글이 실제로 무슨 얘기인지 1~2문장",
           exclude: "정치 싸움, 어그로, 맥락 없이는 이해 안 되는 내부 농담",
         },
         ctx,

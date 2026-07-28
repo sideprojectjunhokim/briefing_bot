@@ -1,6 +1,7 @@
 // 수집이 쓰는 질의. 화면이 읽는 쪽은 lib/db.ts에 있다.
 import { requireSql, type Briefing } from "../db";
 import type { RawItem, ReadRef } from "./types";
+import type { TopicRow } from "./modules/topic";
 
 /**
  * 안 읽은 장을 며칠까지 큐에 두나.
@@ -20,6 +21,17 @@ export const MAX_OK_PER_DAY = 24;
 export interface ModulePref {
   pick_max: number;
   muted: boolean;
+}
+
+/** 켜져 있는 검색 관심사. 수집기는 이걸 코드의 4모듈 뒤에 이어 붙여 돈다. */
+export async function getEnabledTopics(): Promise<TopicRow[]> {
+  const sql = requireSql();
+  const rows = (await sql`
+    select key, label, query, pick_max
+    from topics
+    where enabled = true
+    order by created_at asc`) as TopicRow[];
+  return rows;
 }
 
 export async function getPrefs(): Promise<Record<string, ModulePref>> {

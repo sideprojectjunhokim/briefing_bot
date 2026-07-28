@@ -1,23 +1,46 @@
 import { NextResponse } from "next/server";
-import { applySetup, hasDb } from "@/lib/db";
+import { applySetup, hasDb, type SetupTopic } from "@/lib/db";
 import { MODULE_ORDER } from "@/lib/modules";
+import { presetOf, isCurated } from "@/lib/topics";
 
 export const runtime = "nodejs";
 
-const VALID = new Set(MODULE_ORDER.map((m) => m.key));
+const CURATED = new Set(MODULE_ORDER.map((m) => m.key));
 
 /** 온보딩에서 고른 값을 반영. 로그인 직후 한 번만 불린다. */
 export async function POST(req: Request) {
-  const body = (await req.json().catch(() => ({}))) as { modules?: unknown; pickMax?: unknown };
+  const body = (await req.json().catch(() => ({}))) as {
+    keys?: unknown;
+    custom?: unknown;
+    pickMax?: unknown;
+  };
 
-  const modules = Array.isArray(body.modules)
-    ? body.modules.filter((m): m is string => typeof m === "string" && VALID.has(m))
-    : [];
+  const keys = Array.isArray(body.keys) ? body.keys.filter((k): k is string => typeof k === "string") : [];
   const pickMax = Number(body.pickMax);
 
-  // 하나도 안 고른 상태를 반영하면 전 모듈이 muted가 되어 큐가 영영 빈다
-  if (modules.length === 0) {
-    return NextResponse.json({ error: "모듈을 하나 이상 골라야 합니다" }, { status: 400 });
+  // 코드에 소스가 있는 것과 검색으로 채우는 것으로 가른다
+  const pickedModules = keys.filter((k) => CURATED.has(k));
+  const topics: SetupTopic[] = [];
+  for (const k of keys) {
+    const p = presetOf(k);
+    if (p && !isCurated(p)) topics.push({ key: p.key, label: p.label, query: p.query!, custom: false });
+  }
+
+  // 직접 친 관심사. 검색어는 라벨 그대로 쓴다 — 사용자가 아는 말이 곧 검색어다
+  if (Array.isArray(body.custom)) {
+    for (const c of body.custom) {
+      if (!c || typeof c !== "object") continue;
+      const { key, label } = c as { key?: unknown; label?: unknown };
+      if (typeof key !== "string" || typeof label !== "string") continue;
+      const trimmed = label.trim().slice(0, 40);
+      if (!trimmed || !key.startsWith("my-")) continue;
+      topics.push({ key, label: trimmed, query: trimmed, custom: true });
+    }
+  }
+
+  // 하나도 안 고른 상태를 반영하면 큐가 영영 빈다
+  if (pickedModules.length === 0 && topics.length === 0) {
+    return NextResponse.json({ error: "관심사를 하나 이상 골라야 합니다" }, { status: 400 });
   }
   if (!Number.isInteger(pickMax) || pickMax < 1 || pickMax > 20) {
     return NextResponse.json({ error: "pickMax는 1~20" }, { status: 400 });
@@ -25,6 +48,6 @@ export async function POST(req: Request) {
 
   if (!hasDb) return NextResponse.json({ ok: true, persisted: false });
 
-  await applySetup(modules, pickMax);
-  return NextResponse.json({ ok: true, persisted: true });
+  await applySetup(pickedModules, topics, pickMax);
+  return NextResponse.json({ ok: true, persisted: true, modules: pickedModules.length, topics: topics.length });
 }

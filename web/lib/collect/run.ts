@@ -4,7 +4,8 @@
 // 빈 회차마다 skipped_empty 행을 남겼는데, 매시로 돌리면 그게 하루 96행이고
 // 큐에 잡음만 는다. 없으면 없는 것이고, 화면은 "안 읽은 것 0개"라고 말한다.
 import type { RawItem, SourceModule } from "./types";
-import { MODULES, getModule } from "./modules";
+import { MODULES } from "./modules";
+import { topicModule } from "./modules/topic";
 import { summarize, summarizeDay, SKIPPED } from "./summarize";
 import { estimateReadSeconds } from "./readtime";
 import { parseItems } from "../briefing";
@@ -14,6 +15,7 @@ import {
   briefingExists,
   countTodayOk,
   countUnread,
+  getEnabledTopics,
   getPrefs,
   getRecentlyRead,
   getTodayRead,
@@ -47,9 +49,18 @@ export interface RunResult {
 
 export async function runCollection(opts: { only?: string; now?: Date } = {}): Promise<RunResult> {
   const now = opts.now ?? new Date();
+
+  // 코드에 소스가 있는 4모듈 + 사용자가 고른 검색 관심사.
+  // 둘은 여기서 합쳐진 뒤로 완전히 같은 취급을 받는다 — 파이프라인이 갈리면
+  // 직접 추가한 관심사만 계속 깨진다.
+  const topicRows = await getEnabledTopics();
+  const all = [...MODULES, ...topicRows.map(topicModule)];
+  // 검색 관심사의 상한은 topics 행에, 코드 모듈의 상한은 module_prefs에 있다
+  const topicPickMax = new Map(topicRows.map((r) => [r.key, r.pick_max]));
+
   const targets = opts.only
-    ? ([getModule(opts.only)].filter(Boolean) as SourceModule[])
-    : MODULES;
+    ? all.filter((m) => m.key === opts.only)
+    : all;
   if (opts.only && targets.length === 0) throw new Error(`unknown module: ${opts.only}`);
 
   const archived = await archiveStale();
@@ -66,7 +77,7 @@ export async function runCollection(opts: { only?: string; now?: Date } = {}): P
       continue;
     }
     try {
-      const outcome = await runModule(mod, pref?.pick_max ?? 8);
+      const outcome = await runModule(mod, topicPickMax.get(mod.key) ?? pref?.pick_max ?? 8);
       modules[mod.key] = outcome;
       if (outcome.status === "ok") produced++;
     } catch (e) {
@@ -136,12 +147,15 @@ async function runModule(mod: SourceModule, pickMax: number): Promise<ModuleOutc
 
   // 50건을 훑고 8건을 실었으면 이 장은 8건짜리다. 화면의 "N ITEMS"와
   // "+N MORE"가 이 숫자를 쓰므로, 훑은 수를 넣으면 카드가 거짓말을 한다.
+  //
+  // 훑은 수로 되돌아가는 폴백은 두지 않는다. 본문이 잘려 불릿이 하나도 없는
+  // 장에 "40건"이 찍히는 걸 실제로 봤다 — 0이면 0이라고 하는 게 맞다.
   const shown = parseItems(content);
   const picked = pickedItems(fresh, content);
 
   const briefingId = await insertBriefing({
     moduleKey: mod.key,
-    itemCount: shown.length || fresh.length,
+    itemCount: shown.length,
     content,
     status: "ok",
     estReadSeconds: estimateReadSeconds(content),
@@ -152,7 +166,7 @@ async function runModule(mod: SourceModule, pickMax: number): Promise<ModuleOutc
   // "읽은 장에 있었다"고 착각한다
   await linkItems(briefingId, mod.key, picked.map((it) => it.externalId));
 
-  return { status: "ok", itemCount: shown.length || fresh.length, briefingId, threadOf, sources };
+  return { status: "ok", itemCount: shown.length, briefingId, threadOf, sources };
 }
 
 /**

@@ -24,7 +24,7 @@ export const hotdeal: SourceModule = {
         {
           role: "너는 핫딜 큐레이터다. 읽는 사람은 지금 살지 말지를 정하려고 이걸 연다.",
           leadAsk: LEAD_ASK.hotdeal,
-          itemFormat: "- [품목 / 가격](링크) — 한줄평",
+          itemFormat: "- [품목 / 가격](#번호) — 한줄평",
           exclude: "광고성, 이미 종료된 딜, 같은 물건의 중복 게시",
         },
         ctx,

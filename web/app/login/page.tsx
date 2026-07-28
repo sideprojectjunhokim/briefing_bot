@@ -75,7 +75,7 @@ function LoginInner() {
       await fetch("/api/prefs/setup", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify(setup),
+        body: JSON.stringify({ keys: setup.keys, custom: setup.custom, pickMax: setup.pickMax }),
       }).catch(() => {});
     }
 

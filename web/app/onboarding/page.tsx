@@ -1,11 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { FormEvent, useState } from "react";
 import { useRouter } from "next/navigation";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { FloatingBackdrop } from "@/components/fx/FloatingBackdrop";
-import { MODULE_ORDER } from "@/lib/modules";
-import { saveSetup } from "@/lib/onboarding";
+import { TOPICS, TOPIC_GROUPS, customKey } from "@/lib/topics";
+import { saveSetup, type CustomTopic } from "@/lib/onboarding";
 
 const EASE = [0.16, 1, 0.3, 1] as const;
 
@@ -16,33 +16,40 @@ const AMOUNTS = [
   { value: 12, label: "많이", note: "웬만하면 다 보고 판단" },
 ];
 
-/**
- * 온보딩 — 3스텝 + 완료.
- *
- * 원래 사양(docs/07)은 웰컴 → 관심 분야 → **브리핑 시간** → 완료였는데,
- * 시간당 큐로 바뀌면서 "몇 시에 볼지"라는 개념이 사라졌다. 그 자리에 "한 번에
- * 몇 개까지"를 넣어 module_prefs.pick_max로 잇는다.
- *
- * 고른 값은 여기서 서버에 안 쓴다 — 아직 로그인 전이라 미인증 쓰기가 된다.
- * localStorage에 담아 두고 로그인 성공 직후에 반영한다(lib/onboarding.ts).
- *
- * 자동 이동은 넣지 않는다. 예전에 "이름이 이미 있으면 홈으로"가 있었는데,
- * 이름은 있고 쿠키는 없는 상태에서 홈 ↔ 온보딩으로 무한히 돈다.
- */
+/** 처음 열었을 때 켜져 있는 것 — 전부 켜 두면 첫 큐가 잡글로 넘친다 */
+const DEFAULT_ON = ["technews", "hotdeal"];
+
 export default function OnboardingPage() {
   const router = useRouter();
   const reduced = Boolean(useReducedMotion());
   const [step, setStep] = useState(0);
-  const [picked, setPicked] = useState<string[]>(MODULE_ORDER.map((m) => m.key));
+  const [picked, setPicked] = useState<string[]>(DEFAULT_ON);
+  const [custom, setCustom] = useState<CustomTopic[]>([]);
+  const [draft, setDraft] = useState("");
   const [pickMax, setPickMax] = useState(8);
   const [leaving, setLeaving] = useState(false);
 
   const toggle = (key: string) =>
     setPicked((prev) => (prev.includes(key) ? prev.filter((k) => k !== key) : [...prev, key]));
 
+  const addCustom = (e: FormEvent) => {
+    e.preventDefault();
+    const label = draft.trim().slice(0, 40);
+    if (!label) return;
+    const key = customKey(label);
+    if (custom.some((c) => c.key === key) || TOPICS.some((t) => t.label === label)) {
+      setDraft("");
+      return;
+    }
+    setCustom((prev) => [...prev, { key, label }]);
+    setDraft("");
+  };
+
+  const total = picked.length + custom.length;
+
   const finish = () => {
     if (leaving) return;
-    saveSetup({ modules: picked, pickMax });
+    saveSetup({ keys: picked, custom, pickMax });
     if (reduced) {
       router.push("/login?from=onboarding");
       return;
@@ -53,6 +60,7 @@ export default function OnboardingPage() {
   const steps = [
     {
       key: "welcome",
+      wide: false,
       body: (
         <>
           <h1 className="hero-title">
@@ -61,48 +69,100 @@ export default function OnboardingPage() {
             <em>안 읽은 것만</em>.
           </h1>
           <p className="hero-sub">
-            매시 한 번씩 살펴보고, 건질 게 있을 때만 한 장씩 놓아둡니다. 없는 시간엔
-            아무것도 놓지 않습니다.
+            매시 한 번씩 살펴보고, 건질 게 있을 때만 한 장씩 놓아둡니다. 없는 시간엔 아무것도
+            놓지 않습니다.
           </p>
         </>
       ),
-      next: "무엇을 받을지 고르기",
+      next: "관심사 고르기",
       ready: true,
     },
     {
-      key: "modules",
+      key: "topics",
+      wide: true,
       body: (
         <>
-          <h1 className="hero-title">
+          <h1 className="hero-title ob-tight">
             무엇을 <em>받으시겠어요</em>?
           </h1>
-          <p className="hero-sub">언제든 바꿀 수 있습니다. 안 읽고 넘기는 게 잦으면 먼저 물어봅니다.</p>
-          <div className="ob-chips">
-            {MODULE_ORDER.map((m) => {
-              const on = picked.includes(m.key);
-              return (
-                <button
-                  key={m.key}
-                  type="button"
-                  className="ob-chip"
-                  data-on={on ? "" : undefined}
-                  aria-pressed={on}
-                  onClick={() => toggle(m.key)}
-                >
-                  <span className="en">{m.en}</span>
-                  <span className="kr">{m.name}</span>
-                </button>
-              );
-            })}
-          </div>
-          {picked.length === 0 && <p className="ob-warn">하나는 골라야 큐가 채워집니다.</p>}
+          <p className="hero-sub">
+            언제든 바꿀 수 있습니다. 없는 게 있으면 맨 아래에 직접 적어 주세요.
+          </p>
+
+          {TOPIC_GROUPS.map((group) => (
+            <section key={group} className="ob-group">
+              <h2 className="ob-group-head">{group}</h2>
+              <div className="ob-grid">
+                {TOPICS.filter((t) => t.group === group).map((t) => {
+                  const on = picked.includes(t.key);
+                  return (
+                    <button
+                      key={t.key}
+                      type="button"
+                      className="ob-card"
+                      data-on={on ? "" : undefined}
+                      aria-pressed={on}
+                      onClick={() => toggle(t.key)}
+                    >
+                      <span className="lb">{t.label}</span>
+                      <span className="ht">{t.hint}</span>
+                      <span className="mk" aria-hidden>
+                        {on ? "✓" : "+"}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            </section>
+          ))}
+
+          <section className="ob-group">
+            <h2 className="ob-group-head">직접 추가</h2>
+            <p className="ob-note">
+              적으신 말이 그대로 검색어가 됩니다. 그 관심사도 다른 것들과 똑같이 한 장씩 쌓입니다.
+            </p>
+            <form className="ob-add" onSubmit={addCustom}>
+              <input
+                className="input"
+                placeholder="예: 레고, 홈서버, F1, 등산화"
+                value={draft}
+                maxLength={40}
+                onChange={(e) => setDraft(e.target.value)}
+              />
+              <button type="submit" className="ob-add-btn" disabled={!draft.trim()}>
+                추가
+              </button>
+            </form>
+            {custom.length > 0 && (
+              <div className="ob-grid">
+                {custom.map((c) => (
+                  <button
+                    key={c.key}
+                    type="button"
+                    className="ob-card"
+                    data-on=""
+                    onClick={() => setCustom((prev) => prev.filter((x) => x.key !== c.key))}
+                  >
+                    <span className="lb">{c.label}</span>
+                    <span className="ht">직접 추가 · 누르면 뺍니다</span>
+                    <span className="mk" aria-hidden>
+                      ✓
+                    </span>
+                  </button>
+                ))}
+              </div>
+            )}
+          </section>
+
+          {total === 0 && <p className="ob-warn">하나는 골라야 큐가 채워집니다.</p>}
         </>
       ),
-      next: "다음",
-      ready: picked.length > 0,
+      next: `${total}개 고름 · 다음`,
+      ready: total > 0,
     },
     {
       key: "amount",
+      wide: false,
       body: (
         <>
           <h1 className="hero-title">
@@ -134,6 +194,7 @@ export default function OnboardingPage() {
     },
     {
       key: "done",
+      wide: false,
       body: (
         <>
           <h1 className="hero-title">
@@ -143,9 +204,10 @@ export default function OnboardingPage() {
             <div>
               <dt>받을 것</dt>
               <dd>
-                {MODULE_ORDER.filter((m) => picked.includes(m.key))
-                  .map((m) => m.name)
-                  .join(" · ")}
+                {[
+                  ...TOPICS.filter((t) => picked.includes(t.key)).map((t) => t.label),
+                  ...custom.map((c) => c.label),
+                ].join(" · ")}
               </dd>
             </div>
             <div>
@@ -168,11 +230,12 @@ export default function OnboardingPage() {
   const last = step === steps.length - 1;
 
   return (
-    <main className="stage">
+    <main className="stage ob-stage">
       <FloatingBackdrop />
 
       <motion.div
         className="hero ob-hero"
+        data-wide={cur.wide ? "" : undefined}
         animate={leaving ? { opacity: 0, y: -24, scale: 0.98 } : { opacity: 1, y: 0, scale: 1 }}
         transition={{ duration: 0.35, ease: EASE }}
       >
@@ -221,7 +284,6 @@ export default function OnboardingPage() {
         </div>
       </motion.div>
 
-      {/* 종이 한 장이 올라와 덮으면 로그인으로 */}
       {leaving && (
         <motion.div
           className="sweep-circle"
