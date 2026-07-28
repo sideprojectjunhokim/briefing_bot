@@ -27,6 +27,8 @@ export interface LeadBrief {
   itemFormat: string;
   /** 빼야 할 것 */
   exclude: string;
+  /** 이 모듈에만 해당하는 추가 지시 (예: 소스가 주는 신호를 어떻게 쓸지) */
+  extra?: string;
 }
 
 export function buildPrompt(brief: LeadBrief, ctx: PromptContext): string {
@@ -62,6 +64,8 @@ export function buildPrompt(brief: LeadBrief, ctx: PromptContext): string {
     `제외: ${brief.exclude}`,
     "인사말·맺음말·\"오늘도 좋은 하루\" 류는 쓰지 마라.",
   ];
+
+  if (brief.extra) parts.push("", brief.extra);
 
   const thread = threadingBlock(ctx.recentlyRead);
   if (thread) parts.push("", thread);
