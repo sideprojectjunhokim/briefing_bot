@@ -1,12 +1,13 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { FloatingBackdrop } from "@/components/fx/FloatingBackdrop";
 import { TOPICS, starredPickMax } from "@/lib/topics";
 import { saveSetup, type CustomTopic } from "@/lib/onboarding";
 import { TopicPicker, AmountPicker } from "@/components/TopicPicker";
+import { getRemembered } from "@/lib/session";
 
 const EASE = [0.16, 1, 0.3, 1] as const;
 
@@ -22,6 +23,20 @@ export default function OnboardingPage() {
   const [starred, setStarred] = useState<string[]>([]);
   const [pickMax, setPickMax] = useState(8);
   const [leaving, setLeaving] = useState(false);
+
+  // 미들웨어는 세션이 없으면 무조건 여기로 보낸다 — 로그인 화면이 유일한
+  // 입구면 처음 오는 사람은 소개를 못 보기 때문이다(middleware.ts 참고).
+  // 그런데 이 브라우저에 마지막 로그인 아이디가 남아 있으면 그 사람은
+  // "다시 온 사람"이지 "처음 오는 사람"이 아니다 — 관심사 마법사를 다시
+  // 밟게 하지 않고 곧장 로그인(빠른 재로그인 화면)으로 보낸다.
+  const [checked, setChecked] = useState(false);
+  useEffect(() => {
+    if (getRemembered()) {
+      router.replace("/login");
+      return;
+    }
+    setChecked(true);
+  }, [router]);
 
   const toggle = (key: string) =>
     setPicked((prev) => (prev.includes(key) ? prev.filter((k) => k !== key) : [...prev, key]));
@@ -151,6 +166,8 @@ export default function OnboardingPage() {
 
   const cur = steps[step];
   const last = step === steps.length - 1;
+
+  if (!checked) return null;
 
   return (
     <main className="stage ob-stage">

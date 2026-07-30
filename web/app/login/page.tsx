@@ -1,10 +1,16 @@
 "use client";
 
-import { FormEvent, Suspense, useState } from "react";
+import { FormEvent, Suspense, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { motion, useAnimationControls, useReducedMotion } from "motion/react";
 import { FloatingBackdrop } from "@/components/fx/FloatingBackdrop";
-import { markArrive, setUser } from "@/lib/session";
+import {
+  clearRemembered,
+  getRemembered,
+  markArrive,
+  setRemembered,
+  setUser,
+} from "@/lib/session";
 import { consumeSetup } from "@/lib/onboarding";
 
 /** 온보딩에서 종이가 화면을 덮은 채 도착 — 오버레이가 걷히며 로그인이 드러난다. */
@@ -41,13 +47,28 @@ function LoginInner() {
   const [busy, setBusy] = useState(false);
   const [leaving, setLeaving] = useState(false);
 
+  // 이 브라우저에서 마지막으로 로그인한 아이디가 있으면 그 사람으로
+  // 재로그인하는 흐름을 먼저 보여준다 — "다른 계정으로"를 누르면 원래 폼이 뜬다.
+  const [remembered, setRememberedName] = useState<string | null>(null);
+  useEffect(() => {
+    setRememberedName(getRemembered());
+  }, []);
+  const quick = Boolean(remembered) && !signup;
+
   const shake = () =>
     void controls.start({ x: [0, -10, 10, -7, 7, -3, 0], transition: { duration: 0.4 } });
+
+  const switchAccount = () => {
+    clearRemembered();
+    setRememberedName(null);
+    setPassword("");
+    setError(null);
+  };
 
   const submit = async (e: FormEvent) => {
     e.preventDefault();
     if (leaving || busy) return;
-    const trimmed = name.trim();
+    const trimmed = quick ? (remembered as string) : name.trim();
     if (!trimmed) {
       setError("아이디를 적어주세요.");
       shake();
@@ -91,6 +112,7 @@ function LoginInner() {
     }
 
     setUser(trimmed);
+    setRemembered(trimmed);
     markArrive();
     if (reduced) {
       router.replace("/");
@@ -116,22 +138,28 @@ function LoginInner() {
           <form onSubmit={submit}>
             {[
               <h1 key="t" className="login-title">
-                {signup ? "새 서류철 만들기" : "서류철 열기"}
+                {quick ? `${remembered}님, 어서오세요` : signup ? "새 서류철 만들기" : "서류철 열기"}
               </h1>,
               <p key="s" className="login-sub">
-                {signup
-                  ? "초대코드가 있어야 합니다. 관심사는 만든 뒤에 고릅니다."
-                  : "각자의 서류철은 각자의 아이디로 열립니다."}
+                {quick
+                  ? "비밀번호만 입력하면 됩니다."
+                  : signup
+                    ? "초대코드가 있어야 합니다. 관심사는 만든 뒤에 고릅니다."
+                    : "각자의 서류철은 각자의 아이디로 열립니다."}
               </p>,
-              <input
-                key="i"
-                className="input"
-                placeholder="아이디"
-                autoComplete="username"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                autoFocus
-              />,
+              ...(quick
+                ? []
+                : [
+                    <input
+                      key="i"
+                      className="input"
+                      placeholder="아이디"
+                      autoComplete="username"
+                      value={name}
+                      onChange={(e) => setName(e.target.value)}
+                      autoFocus
+                    />,
+                  ]),
               <input
                 key="p"
                 className="input"
@@ -140,6 +168,7 @@ function LoginInner() {
                 autoComplete={signup ? "new-password" : "current-password"}
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
+                autoFocus={quick}
               />,
               ...(signup
                 ? [
@@ -167,16 +196,22 @@ function LoginInner() {
             ))}
           </form>
           {error && <p className="login-error">{error}</p>}
-          <button
-            type="button"
-            className="login-toggle"
-            onClick={() => {
-              setSignup((s) => !s);
-              setError(null);
-            }}
-          >
-            {signup ? "이미 서류철이 있어요 → 열기" : "처음이에요 → 초대코드로 만들기"}
-          </button>
+          {quick ? (
+            <button type="button" className="login-toggle" onClick={switchAccount}>
+              다른 계정으로
+            </button>
+          ) : (
+            <button
+              type="button"
+              className="login-toggle"
+              onClick={() => {
+                setSignup((s) => !s);
+                setError(null);
+              }}
+            >
+              {signup ? "이미 서류철이 있어요 → 열기" : "처음이에요 → 초대코드로 만들기"}
+            </button>
+          )}
         </motion.div>
       </motion.div>
     </main>
