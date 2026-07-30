@@ -1,28 +1,31 @@
-// M6. backrooms — 백룸 아카이브 탐험. scp.ts와 같은 탐험형이다.
+// M6. backrooms — 백룸 다이제스트. scp와 같은 탐험형이지만 **형식이 다르다**.
 //
-// 백룸에는 Crom 같은 색인 API가 없다. 대신 위키의 목록 페이지(레벨·엔티티)에서
-// 문서 링크를 긁어 풀을 만든다. 한국어 위키(backrooms-wiki-ko)를 본진으로 쓰되,
-// 번역이 스텁이면 영어 위키의 같은 문서로 폴백한다 — 파이프라인이 어차피
-// 영어를 한국어로 옮겨 요약한다.
+// scp는 문서 한 편을 깊이 파고, 백룸은 **여러 레벨을 가볍게** 들고 온다(유저
+// 확정, 07-30). 백룸 문서는 어차피 위키에서 직접 읽는 맛이 있어서, 카드는
+// "오늘은 이런 레벨들이 있다"는 입구 역할만 한다 — 한두 문장씩, 원문 링크로.
+//
+// 풀은 **사이트맵**에서 만든다. 처음에는 목록 페이지(/normal-levels-i 등)를
+// 긁었는데, 그건 허브라서 번역 안 된 레벨까지 전부 링크한다 — 뽑는 족족
+// 404였다(실측). 사이트맵에는 실재하는 문서만 있다.
+// 한국어 위키(문서 137편)를 먼저 소진하고, 다 보면 영어 위키(9천 편)로 넘어간다.
 import type { RawItem, Source, SourceModule } from "../types";
 import { fetchHtml, pageImage, pageText, pageTitle } from "../wikidot";
 import { filterUnseen, upsertAndGetNew } from "../db";
-import { LORE_QUEUE_CAP, lorePostProcess, lorePrompt } from "./lore";
+import { LORE_QUEUE_CAP, lorePostProcess } from "./lore";
 
 const KO_BASE = "http://backrooms-wiki-ko.wikidot.com";
 const EN_BASE = "http://backrooms-wiki.wikidot.com";
 
-/**
- * 풀은 **사이트맵**에서 만든다. 처음에는 목록 페이지(/normal-levels-i 등)를
- * 긁었는데, 그건 허브라서 번역 안 된 레벨까지 전부 링크한다 — 뽑는 족족
- * 404였다(실측). 사이트맵에는 실재하는 문서만 있다.
- * 한국어 위키(문서 137편)를 먼저 소진하고, 다 보면 영어 위키(9천 편)로 넘어간다.
- */
 const SLUG_RE = /\/((?:level|entity)-[0-9][a-z0-9-]*)<\/loc>/g;
+
+/** 한 장에 담는 문서 수. 죽은 링크 대비로 두어 개 더 뽑아 둔다 */
+const PICK_COUNT = 5;
+const PICK_EXTRA = 2;
 
 /** 이보다 짧으면 스텁으로 보고 영어 위키로 폴백한다 */
 const STUB_CHARS = 400;
-const MAX_TEXT = 8000;
+/** 다이제스트라 문서당 텍스트를 짧게 문다 — 5편이면 이것만으로 충분히 무겁다 */
+const MAX_TEXT = 2500;
 
 async function poolFrom(base: string): Promise<string[]> {
   const xml = await fetchHtml(`${base}/sitemap.xml`);
@@ -72,23 +75,37 @@ const wiki: Source = {
         (await poolFrom(EN_BASE)).map((s) => `bkko:${s}`),
       );
     }
+    if (unseen.length === 0) return []; // 풀 소진 — no_new로 끝난다
 
-    // 사이트맵 생성 후 삭제된 문서가 걸릴 수 있다 — 몇 번 다시 뽑고,
-    // 양쪽 위키 다 없는 슬러그는 툼스톤으로 upsert해 풀에서 영구히 뺀다.
-    for (let attempt = 0; attempt < 3 && unseen.length > 0; attempt++) {
-      const id = unseen.splice(Math.floor(Math.random() * unseen.length), 1)[0];
-      const slug = id.slice("bkko:".length);
+    // 무작위로 넉넉히 뽑아 병렬로 가져오고, 성공한 것 중 앞의 PICK_COUNT만 싣는다
+    const chosen: string[] = [];
+    while (chosen.length < PICK_COUNT + PICK_EXTRA && unseen.length > 0) {
+      chosen.push(unseen.splice(Math.floor(Math.random() * unseen.length), 1)[0]);
+    }
+    const docs = await Promise.all(
+      chosen.map(async (id) => ({ id, doc: await fetchDoc(id.slice("bkko:".length)) })),
+    );
 
-      const doc = await fetchDoc(slug);
-      if (!doc) {
-        await upsertAndGetNew("backrooms", [
-          { externalId: id, title: slug, origin: "bkwiki", payload: { dead: true } },
-        ]);
-        continue;
-      }
+    // 사이트맵 생성 후 삭제된 문서 — 툼스톤으로 풀에서 영구히 뺀다
+    const dead = docs.filter((d) => !d.doc);
+    if (dead.length > 0) {
+      await upsertAndGetNew(
+        "backrooms",
+        dead.map((d) => ({
+          externalId: d.id,
+          title: d.id,
+          origin: "bkwiki",
+          payload: { dead: true },
+        })),
+      );
+    }
 
-      return [
-        {
+    return docs
+      .filter((d): d is { id: string; doc: NonNullable<(typeof docs)[0]["doc"]> } => !!d.doc)
+      .slice(0, PICK_COUNT)
+      .map(({ id, doc }) => {
+        const slug = id.slice("bkko:".length);
+        return {
           externalId: id,
           url: doc.url,
           title: pageTitle(doc.html) ?? slug.replace(/-/g, " ").toUpperCase(),
@@ -98,10 +115,8 @@ const wiki: Source = {
             text: doc.text.slice(0, MAX_TEXT),
             imageUrl: pageImage(doc.html),
           },
-        },
-      ];
-    }
-    return []; // 풀 소진 또는 연속으로 죽은 링크 — no_new로 끝난다
+        };
+      });
   },
 };
 
@@ -112,20 +127,35 @@ export const backrooms: SourceModule = {
   queueCap: LORE_QUEUE_CAP,
   render: {
     mode: "llm",
-    maxInput: 1,
+    maxInput: PICK_COUNT,
+    // scp의 lorePrompt(한 편 깊이 파기)와 다르다 — 여긴 다이제스트다.
+    // 고르는 것도 모델 일이 아니다: 코드가 이미 무작위로 골랐고, 전부 싣는다.
+    // 여기서 모델이 몇 개를 떨구면 그 문서는 카드 없이 "봤음"으로 타 버린다.
     prompt: () =>
-      lorePrompt({
-        world: "백룸(The Backrooms)",
-        doc: "레벨 또는 엔티티 문서 한 편",
-        ask: "여기가 어떤 곳이고(또는 이게 뭐고) 마주치면 어떻게 되나. 살아나갈 방법이 있긴 한가.",
-        bullets: [
-          "**생존 난이도** — 문서의 등급 표기와 그 의미",
-          "**묘사** — 그곳의 풍경·소리·질감, 들어가면 뭐가 보이는지",
-          "**엔티티** — 뭐가 살고 있고 얼마나 위험한지 (레벨 문서일 때)",
-          "**입장과 탈출** — 어떻게 들어가게 되고, 어떻게 나오는지",
-          "**생존 수칙** — 문서가 말하는 해야 할 것과 하지 말아야 할 것",
-        ],
-      }),
+      [
+        "너는 백룸(The Backrooms) 아카이브의 안내인이다. 읽는 사람은 일하다 잠깐",
+        "쉬면서 \"오늘은 어떤 레벨들이 있나\" 하고 열어 본다. 뉴스가 아니다 —",
+        "오래된 문서여도 좋은 문서면 된다.",
+        "",
+        "입력은 위키 문서 여러 편의 본문 텍스트다(태그를 벗긴 것이라 메뉴·평점",
+        "같은 잡음이 섞여 있을 수 있다 — 무시해라).",
+        "",
+        "출력은 두 부분이다.",
+        "",
+        "1) 리드 한두 문장 — 오늘 묶음의 인상. 라벨·소제목 없이 바로 문장으로 시작해라.",
+        "",
+        "2) 빈 줄 뒤, **주어진 문서 전부**를 각각 불릿 하나로:",
+        "   `- [문서 제목](#번호) — 한두 문장`",
+        "   그 한두 문장이 답할 것: 여긴 어떤 곳이고(뭐가 살고), 왜 눌러 볼 만한가.",
+        "   생존 난이도 등급이 문서에 있으면 `등급 2` 꼴로 문장에 녹여라.",
+        "   자세한 건 쓰지 마라 — 문서로 넘어가게 만드는 게 이 카드의 일이다.",
+        "",
+        "**빼지 마라.** 고르는 건 이미 끝났다 — 스텁이라 쓸 게 없는 문서만 빼고,",
+        "그 경우에도 나머지는 전부 실어라.",
+        "링크 자리에는 주소 대신 `#번호`를 써라. 실제 주소는 코드가 붙인다.",
+        "**전부 한국어.** 원문이 영어면 읽고 자연스러운 한국어로 옮겨라.",
+        "인사말·맺음말은 쓰지 마라.",
+      ].join("\n"),
     postProcess: lorePostProcess,
   },
 };

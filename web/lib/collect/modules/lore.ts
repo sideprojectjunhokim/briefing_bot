@@ -58,9 +58,12 @@ export function lorePrompt(brief: LoreBrief): string {
 /**
  * 표지 이미지를 본문 맨 앞에 붙인다. 이미지 주소는 코드가 위키에서 가져온 것
  * — 모델에게 URL을 쓰게 하면 지어내거나 자른다.
+ * 다이제스트(여러 편)면 이미지가 있는 첫 문서의 것을 쓴다.
  */
 export function lorePostProcess(content: string, picked: RawItem[]): string {
-  const img = picked[0]?.payload?.imageUrl;
-  if (typeof img !== "string" || !img) return content;
+  const img = picked
+    .map((it) => it.payload?.imageUrl)
+    .find((u): u is string => typeof u === "string" && !!u);
+  if (!img) return content;
   return `![표지](${img})\n\n${content}`;
 }
