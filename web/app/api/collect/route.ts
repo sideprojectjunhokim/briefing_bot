@@ -9,7 +9,7 @@ export const runtime = "nodejs";
 export const maxDuration = 60;
 
 /**
- * 매시 수집. 시계는 GitHub Actions이고 여기는 그 시계가 때리는 종이다.
+ * KST 9~17시 2시간마다 수집. 시계는 GitHub Actions이고 여기는 그 시계가 때리는 종이다.
  *
  * 브라우저 주소창으로도 부를 수 있게 GET을 열어 뒀다 — 수동 실행·디버그 경로다.
  * 인증은 CRON_SECRET 하나(미들웨어 게이트 밖에 있다).

@@ -1,4 +1,4 @@
-// 수집 파이프라인. /api/collect가 부르고, GitHub Actions가 매시 그걸 때린다.
+// 수집 파이프라인. /api/collect가 부르고, GitHub Actions가 KST 9~17시 2시간마다 그걸 때린다.
 //
 // 핵심 규칙 하나: **그 시간에 건질 게 없으면 아무것도 안 쌓는다.** 예전 설계는
 // 빈 회차마다 skipped_empty 행을 남겼는데, 매시로 돌리면 그게 하루 96행이고
@@ -30,8 +30,14 @@ import {
   upsertAndGetNew,
 } from "./db";
 
-/** 하루 끝 한 장을 만드는 시각(KST). 일과가 끝날 무렵 한 번. */
-const WRAP_HOUR_KST = 18;
+/**
+ * 하루 끝 한 장을 만드는 시각(KST). 일과가 끝날 무렵 한 번.
+ *
+ * 07-30 수집이 9·11·13·15·17시로 줄면서 18시대에 도는 회차가 없어졌다(C-25) —
+ * 마지막 회차인 17시로 옮겼다. 스케줄이 다시 바뀌면 여기도 "그날 마지막 회차"와
+ * 같이 맞춰야 한다.
+ */
+const WRAP_HOUR_KST = 17;
 
 export interface ModuleOutcome {
   status: "ok" | "no_new" | "skipped_by_model" | "skipped_guard" | "muted" | "failed";
@@ -224,7 +230,7 @@ function pickedItems(fresh: RawItem[], content: string): RawItem[] {
   return hit.length > 0 ? hit : fresh;
 }
 
-/** 같은 실패를 매시 새 행으로 쌓지 않는다 — 서 있는 실패는 하나면 된다 */
+/** 같은 실패를 회차마다 새 행으로 쌓지 않는다 — 서 있는 실패는 하나면 된다 */
 async function recordFailure(userId: number, moduleKey: string, message: string): Promise<void> {
   const last = await lastBriefingState(userId, moduleKey);
   if (last?.status === "failed" && last.error === message) return;

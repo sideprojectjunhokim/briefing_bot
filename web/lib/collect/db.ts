@@ -10,17 +10,18 @@ import type { TopicRow } from "./modules/topic";
 /**
  * 안 읽은 장을 며칠까지 큐에 두나.
  *
- * 시계가 매시라 안 내리면 큐가 무한히 자란다. 그러면 이건 읽을거리가 아니라
- * 밀린 숙제가 되고, 밀린 숙제는 안 연다. 사흘 지난 소식은 어차피 소식도 아니다.
+ * 07-30 수집이 9~17시 5회로 줄면서 하루치만 남기기로 함(C-25). 큐에서
+ * 내릴 뿐 briefings 행도 source_items도 지우지 않는다 — 지난 목록·중복제거는
+ * 그대로 유지된다.
  */
-const QUEUE_TTL_DAYS = 3;
+const QUEUE_TTL_DAYS = 1;
 
 /** 이어 붙이기가 되짚는 범위 */
 const THREAD_LOOKBACK_DAYS = 7;
 const THREAD_MAX_ROWS = 40;
 
-/** 모듈당 하루 ok 상한 — 루프 버그로 인한 LLM 과금 폭주 방지. 매시 = 24가 정상 상한 */
-export const MAX_OK_PER_DAY = 24;
+/** 모듈당 하루 ok 상한 — 루프 버그로 인한 LLM 과금 폭주 방지. 9~17시 2시간 간격 5회 = 정상 상한(C-25) */
+export const MAX_OK_PER_DAY = 5;
 
 export interface ModulePref {
   pick_max: number;
@@ -227,7 +228,7 @@ export async function countTodayOk(userId: number, moduleKey: string): Promise<n
   return rows[0]?.n ?? 0;
 }
 
-/** 모듈의 가장 최근 장 상태 — 같은 실패를 매시 새 행으로 쌓지 않으려고 본다 */
+/** 모듈의 가장 최근 장 상태 — 같은 실패를 회차마다 새 행으로 쌓지 않으려고 본다 */
 export async function lastBriefingState(
   userId: number,
   moduleKey: string,

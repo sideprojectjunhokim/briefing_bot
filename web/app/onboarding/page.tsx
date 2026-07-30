@@ -50,8 +50,8 @@ export default function OnboardingPage() {
             <em>안 읽은 것만</em>.
           </h1>
           <p className="hero-sub">
-            매시 한 번씩 살펴보고, 건질 게 있을 때만 한 장씩 놓아둡니다. 없는 시간엔 아무것도
-            놓지 않습니다.
+            9시부터 17시까지 2시간마다 살펴보고, 건질 게 있을 때만 한 장씩 놓아둡니다. 없는
+            시간엔 아무것도 놓지 않습니다.
           </p>
         </>
       ),
@@ -139,7 +139,7 @@ export default function OnboardingPage() {
             </div>
             <div>
               <dt>주기</dt>
-              <dd>매시 — 건질 게 없으면 거릅니다</dd>
+              <dd>9~17시 2시간마다 — 건질 게 없으면 거릅니다</dd>
             </div>
           </dl>
         </>

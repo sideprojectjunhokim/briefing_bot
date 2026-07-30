@@ -123,7 +123,7 @@ export function QueueStack({ queue, index, failures, nudge, demo }: Props) {
             />
           ) : queue.length === 0 ? (
             <p className="fs-quiet">
-              지금은 쌓인 게 없습니다. 매시 한 번씩 살펴보고, 건질 게 있을 때만 놓아둡니다.
+              지금은 쌓인 게 없습니다. 9~17시 2시간마다 살펴보고, 건질 게 있을 때만 놓아둡니다.
             </p>
           ) : (
             <div className="fs-stack">
