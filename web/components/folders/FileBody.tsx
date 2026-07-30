@@ -2,7 +2,7 @@
 
 import type { Briefing } from "@/lib/db";
 import type { ModuleMeta } from "@/lib/modules";
-import { parseItems, parseLead, toMarketRows } from "@/lib/briefing";
+import { parseImage, parseItems, parseLead, toMarketRows } from "@/lib/briefing";
 
 /**
  * 브리핑 본문 — 항목 리스트(또는 시세 그리드).
@@ -14,6 +14,9 @@ import { parseItems, parseLead, toMarketRows } from "@/lib/briefing";
 export function FileBody({ briefing, meta }: { briefing: Briefing | null; meta: ModuleMeta }) {
   const items = briefing?.status === "ok" ? parseItems(briefing.content) : [];
   const lead = briefing?.status === "ok" ? parseLead(briefing.content) : null;
+  // 탐험형(SCP·백룸) 카드의 표지. 위키에서 코드가 가져온 주소라 도메인이 다양해
+  // next/image 대신 img를 쓴다 — 원격 도메인을 하나씩 허용 목록에 넣을 일이 아니다.
+  const cover = briefing?.status === "ok" ? parseImage(briefing.content) : null;
 
   if (briefing?.status === "failed") {
     return <p className="fp-empty">수집에 실패했어요 — {briefing.error ?? "원인 미상"}</p>;
@@ -49,6 +52,8 @@ export function FileBody({ briefing, meta }: { briefing: Briefing | null; meta: 
 
   return (
     <>
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      {cover && <img className="fp-cover" src={cover} alt="" loading="lazy" />}
       {lead && <p className="fp-lead">{lead}</p>}
       <ol className="fp-items">
       {items.map((it, i) => (

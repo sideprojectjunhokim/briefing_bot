@@ -1,6 +1,15 @@
 // briefings.content(LLM 마크다운 리스트)를 화면용 구조로 파싱.
 // 실데이터 형식: "- [제목](링크) — 요약" / 데모·템플릿 형식: "- **[출처] 제목** — 부가설명"
 import type { Briefing } from "./db";
+import { isThinkingLeak, stripModelNoise } from "./collect/modelText";
+
+/** 표시 전에 사고 과정 덤프를 걷어낸다. DB에 남은 유출 카드·옛 배포 잔여 대비. */
+function cleanContent(content: string | null): string | null {
+  if (!content) return null;
+  const cleaned = stripModelNoise(content);
+  if (!cleaned || isThinkingLeak(cleaned)) return null;
+  return cleaned;
+}
 
 export interface BriefingItem {
   title: string;
@@ -53,20 +62,29 @@ function parseLine(line: string): BriefingItem | null {
  * parseItems가 불릿 줄만 걸러 읽으므로 이 문단을 넣어도 기존 파싱은 그대로 돈다.
  */
 export function parseLead(content: string | null): string | null {
-  if (!content) return null;
+  const cleaned = cleanContent(content);
+  if (!cleaned) return null;
   const lead: string[] = [];
-  for (const raw of content.split("\n")) {
+  for (const raw of cleaned.split("\n")) {
     const line = raw.trim();
     if (/^[-*]\s/.test(line)) break; // 첫 불릿에서 멈춘다
+    if (line.startsWith("![")) continue; // 표지 이미지 줄 — parseImage가 담당한다
     if (line) lead.push(line.replace(/^#+\s*/, "").replace(/\*\*/g, ""));
   }
   const text = lead.join(" ").trim();
   return text.length > 20 ? text : null;
 }
 
+/** 표지 이미지 — 탐험형(SCP·백룸) 카드가 postProcess로 맨 앞에 붙인다 */
+export function parseImage(content: string | null): string | null {
+  const cleaned = cleanContent(content);
+  return cleaned?.match(/^!\[[^\]]*\]\((https?:\/\/[^\s)]+)\)/m)?.[1] ?? null;
+}
+
 export function parseItems(content: string | null): BriefingItem[] {
-  if (!content) return [];
-  return content
+  const cleaned = cleanContent(content);
+  if (!cleaned) return [];
+  return cleaned
     .split("\n")
     .filter((l) => /^[-*]\s/.test(l.trim()))
     .map((l) => parseLine(l.trim()))

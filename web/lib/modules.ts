@@ -15,6 +15,9 @@ export const MODULE_ORDER: ModuleMeta[] = [
   { key: "market", name: "시세", en: "MARKET", tabLeft: 28 },
   { key: "technews", name: "테크 뉴스", en: "TECH NEWS", tabLeft: 52 },
   { key: "community", name: "커뮤니티", en: "COMMUNITY", tabLeft: 76 },
+  { key: "steamgame", name: "스팀 게임", en: "STEAM", tabLeft: 16 },
+  { key: "scp", name: "SCP 재단", en: "SCP", tabLeft: 40 },
+  { key: "backrooms", name: "백룸", en: "BACKROOMS", tabLeft: 64 },
 ];
 
 /** 하루 끝 한 장. 수집 모듈이 아니라서 색인에는 안 넣는다. */

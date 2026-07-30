@@ -7,6 +7,7 @@ import type { RawItem, SourceModule } from "./types";
 import { MODULES } from "./modules";
 import { topicModule } from "./modules/topic";
 import { summarize, summarizeDay, SKIPPED } from "./summarize";
+import { isThinkingLeak } from "./modelText";
 import { estimateReadSeconds } from "./readtime";
 import { parseItems } from "../briefing";
 import {
@@ -15,6 +16,7 @@ import {
   briefingExists,
   countTodayOk,
   countUnread,
+  countUnreadFor,
   getEnabledTopics,
   getPrefs,
   getRecentlyRead,
@@ -105,6 +107,12 @@ async function runModule(mod: SourceModule, pickMax: number): Promise<ModuleOutc
     return { status: "skipped_guard" };
   }
 
+  // 탐험형: 안 읽은 게 남아 있으면 쉰다. 읽으면 다음 회차에 새 걸 채운다 —
+  // 아카이브에서 꺼내 오는 것이라 소식과 달리 미룬다고 없어지지 않는다.
+  if (mod.queueCap && (await countUnreadFor(mod.key)) >= mod.queueCap) {
+    return { status: "skipped_guard" };
+  }
+
   // 소스별 격리 수집 → 통합
   const collected: RawItem[] = [];
   const sources: Record<string, string> = {};
@@ -145,6 +153,10 @@ async function runModule(mod: SourceModule, pickMax: number): Promise<ModuleOutc
 
   if (!content.trim()) return { status: "skipped_by_model", sources };
 
+  // 사고 과정·프롬프트 해설이 본문으로 들어온 경우(07-28 실측). summarize에서
+  // 한 번 걸러도, format 경로를 위해 여기서 한 번 더 막는다.
+  if (isThinkingLeak(content)) return { status: "skipped_by_model", sources };
+
   // 50건을 훑고 8건을 실었으면 이 장은 8건짜리다. 화면의 "N ITEMS"와
   // "+N MORE"가 이 숫자를 쓰므로, 훑은 수를 넣으면 카드가 거짓말을 한다.
   //
@@ -161,6 +173,12 @@ async function runModule(mod: SourceModule, pickMax: number): Promise<ModuleOutc
   if (shown.length === 0) return { status: "skipped_by_model", sources };
 
   const picked = pickedItems(fresh, content);
+
+  // 표지 이미지 같은, 모델이 아니라 코드가 아는 것들을 여기서 붙인다.
+  // shown/picked 계산 뒤여야 한다 — 덧붙인 줄이 항목 수에 섞이면 안 된다.
+  if (mod.render.mode === "llm" && mod.render.postProcess) {
+    content = mod.render.postProcess(content, picked);
+  }
 
   const briefingId = await insertBriefing({
     moduleKey: mod.key,

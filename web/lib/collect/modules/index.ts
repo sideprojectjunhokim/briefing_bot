@@ -5,8 +5,19 @@ import { technews } from "./technews";
 import { market } from "./market";
 import { hotdeal } from "./hotdeal";
 import { community } from "./community";
+import { scp } from "./scp";
+import { backrooms } from "./backrooms";
+import { steamgame } from "./steamgame";
 
-export const MODULES: SourceModule[] = [technews, market, hotdeal, community];
+export const MODULES: SourceModule[] = [
+  technews,
+  market,
+  hotdeal,
+  community,
+  steamgame,
+  scp,
+  backrooms,
+];
 
 export function getModule(key: string): SourceModule | undefined {
   return MODULES.find((m) => m.key === key);

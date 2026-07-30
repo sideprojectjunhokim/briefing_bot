@@ -89,7 +89,7 @@ export interface PromptContext {
 |------|------|
 | 소스 (v1) | GeekNews RSS (`news.hada.io/rss/news`) → Hacker News top(Algolia API, 영문→"한국어로" 요약) 추가 |
 | origin | `geeknews` · `hackernews` |
-| render | `llm` — 통합 후 "개발자 관심 기준 상위 5~8개, 각 1~2문장 한국어 요약 + 링크" |
+| render | `llm` — 통합 후 "개발자 관심 기준 상위 5~8개, 각 1~2문장 한국어 요약 + 링크". **영어 원문이면 읽고 한국어로 번역·요약**(제목·리드·항목 전부 한국어, `buildPrompt` 공통 규칙) |
 | 비고 | **가장 만만한 모듈 — Phase 2 MVP는 geeknews 소스 1개로 시작** (RSS 안정적, 파싱 단순) |
 
 ### M4. `community` — 커뮤니티 인기글 💬  (여러 소스 통합)
@@ -101,6 +101,33 @@ export interface PromptContext {
 | render | `llm` — 소스 통합, "origin별로 묶어서, 제목만으로 모호한 것만 한줄 부연 + 링크" |
 | 리스크 | 스크래핑 차단 위험 최고(RSS 없는 곳多). **소스별 격리 필수** — 에펨/더쿠는 Cloudflare 방어 강해 후순위, 붙였다 계속 막히면 enabled=false로 끄고 유지 |
 | 구현 순서 | Phase 3에서 클리앙 1개로 모듈 완성 → 이후 소스를 한 번에 하나씩 추가하며 실측(붙는 것만 남김) |
+
+### M5. `steamgame` — 스팀 게임 🎮
+
+| 항목 | 내용 |
+|------|------|
+| 소스 | 스팀 스토어 featuredcategories API(특가·최고 판매·신작, 키 불요) + Google 뉴스 보조 |
+| origin | `steam` · `gnews` |
+| externalId | `steam:<appId>:<final_price>` — **가격이 바뀌면 새 아이템**. id만 쓰면 한 번 실린 게임이 다음 세일 때 영영 안 나온다 |
+| render | `llm` — 가격·할인율 먼저(`12,000원 (-70%)`), 스토어와 뉴스 아이템 섞어 선별 |
+| 비고 | API 가격은 KRW×100 — **코드에서 원으로 변환**해 payload에 넣는다(모델에게 나누기 시키지 않는다) |
+
+### M6·M7. `scp` · `backrooms` — 탐험형(로어) 모듈 👁️
+
+뉴스형과 근본이 다른 두 번째 모듈 유형. 유저 창작 세계관(위키)은 뉴스에 안 잡히므로
+"오늘 무슨 일이"가 아니라 **"오늘은 이 문서"**를 아카이브에서 한 편 꺼내 온다.
+
+| 항목 | scp | backrooms |
+|------|-----|-----------|
+| 풀 | Crom API 평점순 100편 (`scpko.wikidot.com`) | 위키 사이트맵 — KO 137편 소진 후 EN 9천 편 |
+| 본문 | 렌더된 페이지 HTML → `wikidot.ts`가 텍스트·표지 이미지 추출 | 좌동. KO가 스텁이면 EN 폴백 |
+| externalId | `scpko:<slug>` | `bkko:<slug>` — KO/EN 같은 슬러그 = 같은 문서 |
+| 페이스 | `queueCap: 2` — 안 읽은 게 2장 있으면 그 회차는 쉰다. **읽는 속도만큼 나온다** (하루 상한은 MAX_OK_PER_DAY) |
+| 렌더 | `llm` maxInput 1 — 문서 한 편을 리드+구성 불릿(등급·묘사·생존 수칙…)으로. 표지 이미지는 `postProcess`가 코드로 붙인다 |
+| 툼스톤 | 삭제된 문서(404)는 `{dead:true}`로 upsert — 풀에서 영구 제외 |
+
+공통 헬퍼는 `web/lib/collect/modules/lore.ts`(프롬프트 뼈대·queueCap 상수·postProcess)와
+`web/lib/collect/wikidot.ts`(HTML→텍스트·표지 추출)에 있다.
 
 ## 요약(LLM) 공통 규칙
 
@@ -121,6 +148,11 @@ export interface PromptContext {
 | market | 왜 움직였나 |
 | technews | 내 코드가 어떻게 바뀌나 |
 | community | 읽을 값어치가 있나 |
+| steamgame | 위시리스트에 넣을 게 있나 |
+| scp* | 왜 무서운가(또는 웃긴가) |
+| backrooms* | 살아나갈 수 있나 |
+
+\* 탐험형의 리드 질문은 `modules/lore.ts`의 `LoreBrief.ask`에 있다 — 형식이 달라 LEAD_ASK에 못 넣지만, 옆칸과 겹치는지는 같이 본다.
 
 흩어 놓으면 하나씩 고칠 때마다 조금씩 닮아 가고, 다 닮은 뒤에도 아무도 눈치 못 챈다. 새 모듈을 추가할 땐 여기 한 줄을 쓰면서 "옆칸과 다른 질문인가"를 먼저 본다.
 

@@ -143,6 +143,36 @@ export async function briefingExists(id: number, moduleKey: string): Promise<boo
   return rows.length > 0;
 }
 
+/**
+ * 아직 카드에 실은 적 없는 external_id만 남긴다.
+ *
+ * 탐험형 모듈이 쓴다. 뉴스형은 "수집한 것 전부"를 upsert하고 충돌로 거르면
+ * 되지만, 탐험형은 후보 풀에서 **한 편만 골라** 본문까지 가져와야 해서,
+ * 고르기 전에 이미 보여준 것을 빼야 한다. 풀 전체를 upsert해 버리면
+ * 안 실린 후보까지 "봤음"이 되어 두 번 다시 안 나온다.
+ */
+export async function filterUnseen(moduleKey: string, externalIds: string[]): Promise<string[]> {
+  if (externalIds.length === 0) return [];
+  const sql = requireSql();
+  const rows = (await sql`
+    select external_id from source_items
+    where module_key = ${moduleKey} and external_id = any(${externalIds}::text[])`) as {
+    external_id: string;
+  }[];
+  const seen = new Set(rows.map((r) => r.external_id));
+  return externalIds.filter((id) => !seen.has(id));
+}
+
+/** 이 모듈의 안 읽은 장 수 — 탐험형 모듈의 리필 판단(queueCap)에 쓴다 */
+export async function countUnreadFor(moduleKey: string): Promise<number> {
+  const sql = requireSql();
+  const rows = (await sql`
+    select count(*)::int as n from briefings
+    where module_key = ${moduleKey} and status = 'ok'
+      and read_at is null and archived_at is null`) as { n: number }[];
+  return rows[0]?.n ?? 0;
+}
+
 /** 오늘 이 모듈의 ok 장 수 — 비용 가드 */
 export async function countTodayOk(moduleKey: string): Promise<number> {
   const sql = requireSql();

@@ -143,6 +143,9 @@ const MODULE_LABELS = [
   { key: "market", label: "시세" },
   { key: "technews", label: "테크 뉴스" },
   { key: "community", label: "커뮤니티" },
+  { key: "steamgame", label: "스팀 게임" },
+  { key: "scp", label: "SCP 재단" },
+  { key: "backrooms", label: "백룸" },
 ];
 
 /** 모듈·관심사별 안 읽은 장 수 */
@@ -156,13 +159,21 @@ export async function getUnreadCountsByModule(): Promise<Record<string, number>>
   return Object.fromEntries(rows.map((r) => [r.module_key, r.n]));
 }
 
-/** 지금 서 있는 수집 실패(모듈별 최신 장이 failed인 것) — 상단 배너용 */
+/**
+ * 지금 서 있는 수집 실패(모듈별 최신 장이 failed인 것) — 상단 배너용.
+ *
+ * 꺼진 관심사는 뺀다. 끄기 전 마지막 장이 실패였으면 그 배지가 영영 남는다 —
+ * 다시 수집을 안 하니 성공으로 덮일 일도 없다(실측: 끈 지 오래된 game·travel이
+ * FAIL 줄에 계속 떠 있었다).
+ */
 export async function getStandingFailures(): Promise<{ module_key: string; error: string | null }[]> {
   const sql = requireSql();
   const rows = (await sql`
     select distinct on (module_key) module_key, status, error
     from briefings
     where kind = 'live'
+      and module_key not in (select key from topics where enabled = false)
+      and module_key not in (select module_key from module_prefs where muted)
     order by module_key, created_at desc`) as {
     module_key: string;
     status: string;
@@ -493,7 +504,7 @@ export async function applySetup(
 }
 
 /** 코드에 소스가 있는 모듈 키. lib/modules.ts의 MODULE_ORDER와 같아야 한다 */
-const MODULE_KEYS = ["hotdeal", "market", "technews", "community"];
+const MODULE_KEYS = ["hotdeal", "market", "technews", "community", "steamgame", "scp", "backrooms"];
 
 /** 답을 받았다. 줄이거나, 아예 끄거나, 그대로 두거나. */
 export async function answerNudge(

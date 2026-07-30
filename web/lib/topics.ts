@@ -40,6 +40,9 @@ export const TOPICS: TopicPreset[] = [
 
   // ── 취미 ──
   { key: "game", label: "게임", hint: "신작·업데이트·콘솔", group: "취미", query: "게임 신작 콘솔 스팀" },
+  { key: "steamgame", label: "스팀 게임", hint: "세일·판매순위·신작을 스토어에서 직접", group: "취미" },
+  { key: "scp", label: "SCP 재단", hint: "아카이브에서 오늘의 문서 한 편", group: "취미" },
+  { key: "backrooms", label: "백룸", hint: "레벨·엔티티 탐험 카드", group: "취미" },
   { key: "car", label: "자동차", hint: "신차·전기차·시승", group: "취미", query: "자동차 신차 전기차" },
   { key: "camera", label: "카메라 · 사진", hint: "바디·렌즈·촬영", group: "취미", query: "카메라 렌즈 미러리스" },
   { key: "audio", label: "오디오", hint: "헤드폰·이어폰·스피커", group: "취미", query: "오디오 헤드폰 이어폰 스피커" },
