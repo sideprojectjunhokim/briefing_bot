@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import type { Briefing, IndexEntry, SkipNudge } from "@/lib/db";
 import { metaOf, type ModuleMeta } from "@/lib/modules";
-import { agoLabel, parseItems, timeOf } from "@/lib/briefing";
+import { agoLabel, parseItems, parseLead, timeOf } from "@/lib/briefing";
 import { formatReadTime } from "@/lib/collect/readtime";
 import { consumeArrive } from "@/lib/session";
 import { StarToggle } from "@/components/StarToggle";
@@ -183,6 +183,7 @@ function QueueFolder({
 }) {
   const meta = metaOf(briefing.module_key, label);
   const first = parseItems(briefing.content)[0];
+  const leadPreview = parseLead(briefing.content);
 
   return (
     <motion.div
@@ -222,7 +223,10 @@ function QueueFolder({
             {briefing.item_count > 1 && <p className="fs-more">+{briefing.item_count - 1} MORE</p>}
           </>
         ) : (
-          <p className="fs-preview">{(briefing.content ?? "").slice(0, 90)}…</p>
+          <p className="fs-preview">
+            {(leadPreview ?? "본문이 비어 있어요.").slice(0, 90)}
+            {leadPreview ? "…" : ""}
+          </p>
         )}
       </button>
     </motion.div>

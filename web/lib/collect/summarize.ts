@@ -7,6 +7,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 import type { RawItem } from "./types";
 import { MODELS, type ModelTier } from "./models";
+import { isSkipResponse, isThinkingLeak, stripModelNoise } from "./modelText";
 
 // 요약만 읽고 끝낼 수 있어야 해서 항목당 2~3문장을 쓴다. 8항목이면 한국어로
 // 2,500토큰쯤인데, 모자라면 카드가 문장 중간에서 끊긴다(2000일 때 실제로 그랬다).
@@ -62,11 +63,13 @@ export async function summarize(
 
   const text = await ask(
     systemPrompt,
-    "아래 JSON은 이번 회차에 새로 수집된 아이템이다. 지시대로 한국어 마크다운으로 써라.\n\n" +
+    "아래 JSON은 이번 회차에 새로 수집된 아이템이다. " +
+      "영어 원문이면 읽고 한국어로 번역·요약한 뒤, 지시대로 한국어 마크다운으로 써라.\n\n" +
       JSON.stringify(clipped, null, 2),
   );
 
-  if (!text || /^SKIP\b/i.test(text)) return SKIPPED;
+  // 사고 과정 덤프·빈 응답·SKIP 은 카드로 남기지 않는다
+  if (isSkipResponse(text) || isThinkingLeak(text)) return SKIPPED;
   return splitThread(attachUrls(text, used));
 }
 
@@ -106,10 +109,14 @@ async function ask(instructions: string, user: string, tier: ModelTier = "fast")
     `[llm] ${MODELS[tier]} in=${msg.usage.input_tokens} out=${msg.usage.output_tokens}`,
   );
   const text = msg.content
-    .map((b) => (b.type === "text" ? b.text : ""))
+    .map((b) => {
+      // thinking 전용 블록은 버림. 프록시가 text에 섞어 넣은 건 stripModelNoise가 담당.
+      if (b.type === "text") return b.text;
+      return "";
+    })
     .join("\n")
     .trim();
-  return stripCodeFence(text);
+  return stripCodeFence(stripModelNoise(text));
 }
 
 /**
@@ -132,7 +139,7 @@ export async function summarizeDay(readContents: string[]): Promise<string | typ
     [
       "너는 오늘 하루 이 사람이 읽은 것들을 한 문단으로 되짚어 주는 사람이다.",
       "",
-      "평문 한 문단, 4~6문장. 불릿·소제목·목록을 쓰지 마라.",
+      "평문 한 문단, 4~6문장, **전부 한국어**. 불릿·소제목·목록을 쓰지 마라.",
       "오늘 읽은 것들을 다시 나열하지 마라 — 그건 이미 읽었다.",
       "관통하는 줄기가 있으면 그걸 말하고, 없으면 없다고 솔직히 써라.",
       "억지로 교훈을 만들지 마라. 인사말·맺음말도 쓰지 마라.",
@@ -140,7 +147,8 @@ export async function summarizeDay(readContents: string[]): Promise<string | typ
     "오늘 읽은 것들:\n\n" + readContents.join("\n\n---\n\n"),
   );
 
-  return text || SKIPPED;
+  if (isSkipResponse(text) || isThinkingLeak(text)) return SKIPPED;
+  return text;
 }
 
 /**

@@ -7,6 +7,7 @@
  */
 import Anthropic from "@anthropic-ai/sdk";
 import { MODELS } from "../collect/models";
+import { stripModelNoise } from "../collect/modelText";
 import {
   addTopic,
   getBriefing,
@@ -273,10 +274,12 @@ export async function runChat(turns: ChatTurn[], cardId?: number): Promise<ChatR
       messages,
     });
 
-    const text = res.content
-      .map((b) => (b.type === "text" ? b.text : ""))
-      .join("\n")
-      .trim();
+    const text = stripModelNoise(
+      res.content
+        .map((b) => (b.type === "text" ? b.text : ""))
+        .join("\n")
+        .trim(),
+    );
 
     if (res.stop_reason !== "tool_use") {
       return { reply: text || "답을 만들지 못했습니다.", actions, model };

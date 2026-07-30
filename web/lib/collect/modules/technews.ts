@@ -99,7 +99,8 @@ export const technews: SourceModule = {
               "하나로 합쳐 한 번만 써라. 이때 링크는 한국어 쪽(geeknews)을 쓰고, 중요도 판단은 " +
               "Hacker News의 points를 쓴다.",
             "",
-            "영문 제목은 한국어로 자연스럽게 옮겨 써라. 원문 표기를 괄호로 덧붙이지 마라 — 줄만 길어진다.",
+            // 언어 규칙(영문→한국어)은 buildPrompt 공통. HN은 거의 전부 영어라 여기서 한 번 더 박는다.
+            "`origin: hackernews`는 거의 전부 영어다. 제목·본문을 읽고 한국어로 번역·요약해라.",
             "**points·comments 숫자는 본문에 쓰지 마라.** 네가 고를 때만 쓰는 값이다.",
           ].join("\n"),
         },
