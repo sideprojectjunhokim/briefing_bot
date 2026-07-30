@@ -180,6 +180,21 @@ body {
   letter-spacing: 0.04em;
   color: var(--ds-red);
 }
+/* 로그인 ↔ 가입 전환 — 링크처럼 보이는 버튼 */
+.login-toggle {
+  margin-top: 1.1rem;
+  padding: 0;
+  border: 0;
+  background: none;
+  font-family: var(--ds-mono);
+  font-size: 0.7rem;
+  letter-spacing: 0.04em;
+  color: var(--ds-gray);
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.login-toggle:hover { color: var(--ds-ink); }
 
 /* ═══ 메인 — 서류 캐비닛 (.ds 스코프) ═══ */
 
@@ -587,6 +602,78 @@ body {
 .fp-empty {
   padding: 5rem 0;
   text-align: center;
+  font-style: italic;
+  color: var(--ds-gray);
+}
+
+/* ── 넌센스 퀴즈 ── */
+.ds-settings.tight { margin-top: 0.5rem; }
+
+.qz-wrap { max-width: 46ch; }
+
+.qz-score {
+  display: flex;
+  align-items: baseline;
+  gap: 0.9rem;
+  margin-top: 1.2rem;
+  font-family: var(--ds-mono);
+  font-size: 0.72rem;
+  letter-spacing: 0.05em;
+}
+.qz-tier {
+  padding: 0.25rem 0.55rem;
+  border: 1px solid var(--ds-ink);
+  font-weight: 600;
+}
+.qz-count { color: var(--ds-ink); }
+.qz-next { color: var(--ds-gray); }
+
+/* 문제 슬립 — 서류철에서 꺼낸 쪽지 한 장 */
+.qz-slip {
+  margin-top: 1.6rem;
+  padding: 1.6rem 1.5rem;
+  border: 1px solid var(--ds-line);
+  background: var(--ds-paper, #fff);
+}
+.qz-no {
+  margin: 0 0 0.7rem;
+  font-family: var(--ds-mono);
+  font-size: 0.7rem;
+  color: var(--ds-gray);
+}
+.qz-question {
+  margin: 0 0 1.3rem;
+  font-size: 1.25rem;
+  line-height: 1.6;
+  font-weight: 600;
+  word-break: keep-all;
+}
+.qz-form .input { margin-bottom: 0.8rem; }
+.qz-actions { display: flex; gap: 0.8rem; align-items: center; }
+.qz-giveup {
+  padding: 0;
+  border: 0;
+  background: none;
+  font-family: var(--ds-mono);
+  font-size: 0.72rem;
+  color: var(--ds-gray);
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.qz-giveup:hover { color: var(--ds-ink); }
+.qz-feedback {
+  margin: 1rem 0;
+  font-size: 0.95rem;
+  line-height: 1.6;
+}
+.qz-feedback.right { color: var(--ds-ink); font-weight: 600; }
+.qz-feedback.wrong { color: var(--ds-red); }
+.qz-feedback.gaveup { color: var(--ds-gray); }
+.qz-feedback.gaveup strong { color: var(--ds-ink); }
+.qz-answer-echo { color: var(--ds-gray); font-weight: 400; }
+.qz-done {
+  margin-top: 3rem;
   font-style: italic;
   color: var(--ds-gray);
 }

@@ -29,25 +29,37 @@ concurrency:
 jobs:
   tick:
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 15
     steps:
-      - name: 수집 트리거
+      - name: 수집 트리거 (유저별 순차)
         env:
           BASE_URL: ${{ secrets.BASE_URL }}
           CRON_SECRET: ${{ secrets.CRON_SECRET }}
           MODULE: ${{ inputs.module }}
         run: |
           set -euo pipefail
-          url="$BASE_URL/api/collect"
-          if [ -n "${MODULE:-}" ]; then url="$url?module=$MODULE"; fi
+          base="$BASE_URL/api/collect"
 
-          # 본문은 로그에 남긴다 — 어느 모듈이 뭘 건졌는지 보는 유일한 창이다
-          code=$(curl -sS -X POST "$url" \
-            -H "authorization: Bearer $CRON_SECRET" \
-            -w '\n%{http_code}' -o /tmp/out.json --max-time 120 | tail -1)
-          cat /tmp/out.json
-          echo
-          if [ "$code" != "200" ]; then
-            echo "::error::수집 실패 (HTTP $code)"
-            exit 1
-          fi
+          # 완전 개인화(07-30): 수집이 유저별로 돈다. Vercel 함수가 60초 상한이라
+          # 전원을 한 호출에 묶을 수 없다 — 목록을 받아 한 명씩 부른다.
+          # 한 명이 실패해도 나머지는 계속 돈다.
+          users=$(curl -sS "$base?list=1" -H "authorization: Bearer $CRON_SECRET" --max-time 30 \
+            | jq -r '.users[]')
+          echo "users: $(echo $users | tr '\n' ' ')"
+
+          failed=0
+          for uid in $users; do
+            url="$base?user=$uid"
+            if [ -n "${MODULE:-}" ]; then url="$url&module=$MODULE"; fi
+            echo "── user $uid ──"
+            code=$(curl -sS -X POST "$url" \
+              -H "authorization: Bearer $CRON_SECRET" \
+              -w '\n%{http_code}' -o /tmp/out.json --max-time 120 | tail -1)
+            cat /tmp/out.json
+            echo
+            if [ "$code" != "200" ]; then
+              echo "::error::user $uid 수집 실패 (HTTP $code)"
+              failed=1
+            fi
+          done
+          exit $failed

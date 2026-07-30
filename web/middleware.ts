@@ -1,5 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { SESSION_COOKIE, gateEnabled, sessionToken, timingSafeEqual } from "@/lib/auth";
+import { SESSION_COOKIE, gateEnabled, verifySession } from "@/lib/auth";
 
 // /api/collect은 게이트 밖이다 — GitHub Actions가 CRON_SECRET으로 스스로 인증한다.
 // /onboarding은 로그인 전에 보는 소개 화면이라 열어 둔다.
@@ -14,7 +14,7 @@ export async function middleware(req: NextRequest) {
   }
 
   const cookie = req.cookies.get(SESSION_COOKIE)?.value ?? "";
-  if (timingSafeEqual(cookie, await sessionToken())) return NextResponse.next();
+  if (cookie && (await verifySession(cookie)) !== null) return NextResponse.next();
 
   // API는 리다이렉트가 아니라 401로 — fetch가 로그인 HTML을 받아 파싱하면 더 헷갈린다
   if (pathname.startsWith("/api/")) {

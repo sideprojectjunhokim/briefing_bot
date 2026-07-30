@@ -91,6 +91,9 @@ export function Shell({ index, failures, demo, active, nudge, children }: ShellP
         <Link href="/settings" className={`ds-settings${active === "settings" ? " on" : ""}`}>
           관심사 바꾸기
         </Link>
+        <Link href="/quiz" className={`ds-settings tight${active === "quiz" ? " on" : ""}`}>
+          넌센스 퀴즈
+        </Link>
 
         <div className="ds-side-foot">
           {demo && <span className="ds-flag-demo">PREVIEW DATA</span>}

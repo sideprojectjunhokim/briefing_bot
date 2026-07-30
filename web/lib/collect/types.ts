@@ -8,11 +8,17 @@ export interface RawItem {
   payload?: Record<string, unknown>;
 }
 
+/** fetch에 넘어가는 실행 맥락 — 탐험형 소스가 "이 유저가 이미 본 것"을 걸러야 해서 */
+export interface SourceContext {
+  userId: number;
+}
+
 export interface Source {
   key: string;
   label: string;
   enabled: boolean; // false면 스킵 (사이트가 죽었을 때 코드 한 줄로 차단)
-  fetch(): Promise<RawItem[]>;
+  // ctx가 필요 없는 소스(뉴스형)는 인자 없이 정의해도 된다 — TS가 허용한다
+  fetch(ctx: SourceContext): Promise<RawItem[]>;
 }
 
 /** 이어 붙이기 재료 — 사용자가 최근에 **읽은** 장과 그 안에 있던 제목들 */

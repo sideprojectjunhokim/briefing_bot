@@ -1,5 +1,6 @@
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { getArchiveView } from "@/lib/data";
+import { currentUserId } from "@/lib/session-server";
 import { metaOf } from "@/lib/modules";
 import { ModuleArchive } from "@/components/folders/ModuleArchive";
 
@@ -30,7 +31,9 @@ function decodeKey(raw: string): string {
 export default async function ModulePage({ params }: { params: Promise<{ key: string }> }) {
   const { key: raw } = await params;
   const key = decodeKey(raw);
-  const { briefings, index, demo } = await getArchiveView(key);
+  const userId = await currentUserId();
+  if (userId === null) redirect("/onboarding");
+  const { briefings, index, demo } = await getArchiveView(userId, key);
 
   // 색인에 있거나 지난 장이 남아 있으면 연다. 코드에 박힌 4모듈만 통과시키던
   // 예전 검사로는 직접 추가한 관심사가 404가 난다.

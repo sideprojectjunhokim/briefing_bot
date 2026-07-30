@@ -8,7 +8,7 @@
 // 긁었는데, 그건 허브라서 번역 안 된 레벨까지 전부 링크한다 — 뽑는 족족
 // 404였다(실측). 사이트맵에는 실재하는 문서만 있다.
 // 한국어 위키(문서 137편)를 먼저 소진하고, 다 보면 영어 위키(9천 편)로 넘어간다.
-import type { RawItem, Source, SourceModule } from "../types";
+import type { RawItem, Source, SourceContext, SourceModule } from "../types";
 import { fetchHtml, pageImage, pageText, pageTitle } from "../wikidot";
 import { filterUnseen, upsertAndGetNew } from "../db";
 import { LORE_QUEUE_CAP, lorePostProcess } from "./lore";
@@ -62,15 +62,17 @@ const wiki: Source = {
   key: "bkwiki",
   label: "백룸 위키",
   enabled: true,
-  async fetch(): Promise<RawItem[]> {
+  async fetch({ userId }: SourceContext): Promise<RawItem[]> {
     // 한국어 풀 먼저, 소진되면 영어 풀. 슬러그가 같으면 같은 문서로 본다 —
     // 한국어로 이미 본 레벨이 영어 풀에서 또 나오면 안 된다.
     let unseen = await filterUnseen(
+      userId,
       "backrooms",
       (await poolFrom(KO_BASE)).map((s) => `bkko:${s}`),
     );
     if (unseen.length === 0) {
       unseen = await filterUnseen(
+        userId,
         "backrooms",
         (await poolFrom(EN_BASE)).map((s) => `bkko:${s}`),
       );
@@ -90,6 +92,7 @@ const wiki: Source = {
     const dead = docs.filter((d) => !d.doc);
     if (dead.length > 0) {
       await upsertAndGetNew(
+        userId,
         "backrooms",
         dead.map((d) => ({
           externalId: d.id,

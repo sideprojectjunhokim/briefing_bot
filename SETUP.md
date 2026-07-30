@@ -20,14 +20,21 @@ GitHub 저장소는 이미 있다(`sideprojectjunhokim/briefing_bot`).
 
 ```bash
 cd C:/briefing-bot/web
-cp .env.example .env.local     # DATABASE_URL, ANTHROPIC_API_KEY, CRON_SECRET, APP_PASSWORD 채우기
+cp .env.example .env.local     # DATABASE_URL, ANTHROPIC_API_KEY, CRON_SECRET, INVITE_CODE 채우기
 npm install
 npm run db:push                # db/schema.sql 적용 — 여러 번 돌려도 안전
 ```
 
 **검증:** `스키마 적용 완료 — N개 구문.` 이 뜬다. Neon SQL 에디터에서
 `select table_name from information_schema.tables where table_schema='public';`
-→ `briefings` · `source_items` · `module_prefs` 세 개.
+→ `users` · `briefings` · `source_items` · `module_prefs` · `topics` ·
+`quiz_questions` · `quiz_attempts`.
+
+넌센스 퀴즈 문제은행을 채운다(여러 번 돌려도 안전):
+
+```bash
+node --env-file=.env.local scripts/quiz-seed.mjs   # db/quiz-questions.json → 682문항
+```
 
 ## 2. 로컬에서 첫 수집
 
@@ -38,8 +45,12 @@ npm run dev
 브라우저로 직접 호출한다(수동 실행 겸 디버그 경로):
 
 ```
-http://localhost:3000/api/collect?secret=<CRON_SECRET>
+http://localhost:3000/api/collect?user=1&secret=<CRON_SECRET>
 ```
+
+수집은 **유저별로 돈다**(07-30 완전 개인화). `user`를 빼면 전원을 순차로 돌지만,
+Vercel 함수가 60초 상한이라 그 경로는 사람이 디버그할 때만 쓴다.
+`?list=1`은 유저 아이디 목록만 돌려준다 — Actions가 그걸로 나눠 부른다.
 
 **검증:** 응답 JSON에 `"technews": { "status": "ok", "itemCount": N }`.
 `http://localhost:3000` 을 열면 그 장이 큐에 있고, 누르면 펼쳐지고, 닫으면 흐려진다. 새로고침하면 큐에서 빠진다.
@@ -51,18 +62,24 @@ http://localhost:3000/api/collect?secret=<CRON_SECRET>
 ## 3. Vercel 배포
 
 - New Project → 저장소 선택 → **Root Directory = `web`**
-- Environment Variables 4개:
+- Environment Variables:
 
 | 키 | 값 |
 |---|---|
 | `DATABASE_URL` | Neon connection string |
 | `ANTHROPIC_API_KEY` | Anthropic 키 |
 | `CRON_SECRET` | 아무 랜덤 문자열 (아래 GitHub secret과 같은 값) |
-| `APP_PASSWORD` | 화면 접근 비밀번호. **비워 두면 게이트가 꺼진다** |
+| `INVITE_CODE` | 가입에 필요한 초대코드. **비워 두면 아무도 가입할 수 없다**(기존 계정 로그인은 됨) |
+| `SESSION_SECRET` | 세션 쿠키 서명 키. **선택** — 없으면 `CRON_SECRET`을 쓴다 |
+
+`APP_PASSWORD`는 이제 안 쓴다(07-30 완전 개인화 전까지 쓰던 단일 비밀번호).
+남아 있어도 무해하지만 지워도 된다.
 
 - Deploy → 배포 URL 확인.
 
-**검증:** 배포 URL을 열면 `/onboarding`으로 튕기고, 이름 + 비밀번호로 들어가진다. 비밀번호를 틀리면 안 들어가진다.
+**검증:** 배포 URL을 열면 `/onboarding`으로 튕기고, 아이디 + 비밀번호로 들어가진다.
+비밀번호를 틀리면 안 들어가진다. "처음이에요 → 초대코드로 만들기"에서 초대코드를
+틀리게 넣으면 가입이 막힌다.
 
 ## 4. 시계 붙이기 (GitHub Actions)
 

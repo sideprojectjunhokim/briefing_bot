@@ -8,7 +8,7 @@
 // 풀은 Crom API(한국 위키 색인, CC BY-SA)에서 평점순으로 받는다. 본문은
 // 위키 페이지를 직접 긁는다 — Crom의 source는 위키텍스트라 [[include]]가
 // 전개 전이고, 렌더된 HTML이 사람이 읽는 그대로다.
-import type { RawItem, Source, SourceModule } from "../types";
+import type { RawItem, Source, SourceContext, SourceModule } from "../types";
 import { fetchHtml, pageImage, pageText } from "../wikidot";
 import { filterUnseen } from "../db";
 import { LORE_QUEUE_CAP, lorePostProcess, lorePrompt } from "./lore";
@@ -53,14 +53,14 @@ const crom: Source = {
   key: "crom",
   label: "SCP 한국어 위키",
   enabled: true,
-  async fetch(): Promise<RawItem[]> {
-    // 풀에서 아직 안 보여준 것만 남기고 한 편을 뽑는다.
+  async fetch({ userId }: SourceContext): Promise<RawItem[]> {
+    // 풀에서 **이 유저가** 아직 안 본 것만 남기고 한 편을 뽑는다.
     // 번역·오리지널이 섞여 있는 게 맞다 — 읽는 사람에겐 같은 아카이브다.
     const pool = (await cromTopPages()).filter(
       (n) => n.wikidotInfo && n.wikidotInfo.tags.includes("scp"),
     );
     const byId = new Map(pool.map((n) => [`scpko:${n.url.split("/").pop()}`, n]));
-    const unseen = await filterUnseen("scp", [...byId.keys()]);
+    const unseen = await filterUnseen(userId, "scp", [...byId.keys()]);
     if (unseen.length === 0) return []; // 풀 소진 — no_new로 끝난다
 
     const id = unseen[Math.floor(Math.random() * unseen.length)];

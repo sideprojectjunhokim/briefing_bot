@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { runChat, type ChatTurn } from "@/lib/chat/agent";
 import { hasDb } from "@/lib/db";
+import { requireUserId } from "@/lib/session-server";
 
 export const runtime = "nodejs";
 // 도구를 부르면 왕복이 늘고, deep 모델은 한 번에 10초쯤 걸린다
@@ -25,9 +26,13 @@ export async function POST(req: Request) {
   if (turns.length === 0) return NextResponse.json({ error: "messages 필요" }, { status: 400 });
   if (!hasDb) return NextResponse.json({ error: "DB 없음" }, { status: 503 });
 
+  const userId = await requireUserId();
+  if (userId === null) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+
   const cardId = Number(body.cardId);
   try {
     const result = await runChat(
+      userId,
       turns.slice(-MAX_TURNS),
       Number.isInteger(cardId) && cardId > 0 ? cardId : undefined,
     );

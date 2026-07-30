@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { applySetup, hasDb, type SetupTopic } from "@/lib/db";
+import { requireUserId } from "@/lib/session-server";
 import { MODULE_ORDER } from "@/lib/modules";
 import { presetOf, isCurated } from "@/lib/topics";
 
@@ -51,10 +52,13 @@ export async function POST(req: Request) {
 
   if (!hasDb) return NextResponse.json({ ok: true, persisted: false });
 
+  const userId = await requireUserId();
+  if (userId === null) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+
   const starred = Array.isArray(body.starred)
     ? body.starred.filter((k): k is string => typeof k === "string")
     : [];
 
-  await applySetup(pickedModules, topics, pickMax, starred);
+  await applySetup(userId, pickedModules, topics, pickMax, starred);
   return NextResponse.json({ ok: true, persisted: true, modules: pickedModules.length, topics: topics.length });
 }

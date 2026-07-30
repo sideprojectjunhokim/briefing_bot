@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { hasDb, setStar } from "@/lib/db";
+import { requireUserId } from "@/lib/session-server";
 
 export const runtime = "nodejs";
 
@@ -12,6 +13,8 @@ export async function POST(req: Request) {
   const starred = body.starred !== false;
   if (!hasDb) return NextResponse.json({ ok: true, persisted: false });
 
-  const pickMax = await setStar(key, starred);
+  const userId = await requireUserId();
+  if (userId === null) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+  const pickMax = await setStar(userId, key, starred);
   return NextResponse.json({ ok: true, persisted: true, starred, pickMax });
 }

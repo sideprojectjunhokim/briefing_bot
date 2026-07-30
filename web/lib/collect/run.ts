@@ -50,13 +50,18 @@ export interface RunResult {
   unread: number;
 }
 
-export async function runCollection(opts: { only?: string; now?: Date } = {}): Promise<RunResult> {
+export async function runCollection(opts: {
+  userId: number;
+  only?: string;
+  now?: Date;
+}): Promise<RunResult> {
   const now = opts.now ?? new Date();
+  const userId = opts.userId;
 
   // 코드에 소스가 있는 4모듈 + 사용자가 고른 검색 관심사.
   // 둘은 여기서 합쳐진 뒤로 완전히 같은 취급을 받는다 — 파이프라인이 갈리면
   // 직접 추가한 관심사만 계속 깨진다.
-  const topicRows = await getEnabledTopics();
+  const topicRows = await getEnabledTopics(userId);
   const all = [...MODULES, ...topicRows.map(topicModule)];
   // 검색 관심사의 상한은 topics 행에, 코드 모듈의 상한은 module_prefs에 있다
   const topicPickMax = new Map(topicRows.map((r) => [r.key, r.pick_max]));
@@ -66,8 +71,8 @@ export async function runCollection(opts: { only?: string; now?: Date } = {}): P
     : all;
   if (opts.only && targets.length === 0) throw new Error(`unknown module: ${opts.only}`);
 
-  const archived = await archiveStale();
-  const prefs = await getPrefs();
+  const archived = await archiveStale(userId);
+  const prefs = await getPrefs(userId);
 
   const modules: Record<string, ModuleOutcome> = {};
   let produced = 0;
@@ -80,37 +85,41 @@ export async function runCollection(opts: { only?: string; now?: Date } = {}): P
       continue;
     }
     try {
-      const outcome = await runModule(mod, topicPickMax.get(mod.key) ?? pref?.pick_max ?? 8);
+      const outcome = await runModule(userId, mod, topicPickMax.get(mod.key) ?? pref?.pick_max ?? 8);
       modules[mod.key] = outcome;
       if (outcome.status === "ok") produced++;
     } catch (e) {
       const message = e instanceof Error ? e.message : String(e);
       modules[mod.key] = { status: "failed", error: message };
-      await recordFailure(mod.key, message);
+      await recordFailure(userId, mod.key, message);
     }
   }
 
-  const wrap = await maybeWrap(now);
+  const wrap = await maybeWrap(userId, now);
   if (wrap === "created") produced++;
 
   // 새로 쌓인 것도 없고 읽을 것도 없을 때만 아카이브에서 하나 꺼낸다.
   // 새것으로 위장하지 않는다 — 화면이 "N일 전 것"이라고 밝힌다.
   let resurfaced: number | null = null;
-  if (produced === 0 && (await countUnread()) === 0) {
-    resurfaced = (await resurfaceOne())?.id ?? null;
+  if (produced === 0 && (await countUnread(userId)) === 0) {
+    resurfaced = (await resurfaceOne(userId))?.id ?? null;
   }
 
-  return { archived, modules, wrap, resurfaced, unread: await countUnread() };
+  return { archived, modules, wrap, resurfaced, unread: await countUnread(userId) };
 }
 
-async function runModule(mod: SourceModule, pickMax: number): Promise<ModuleOutcome> {
-  if ((await countTodayOk(mod.key)) >= MAX_OK_PER_DAY) {
+async function runModule(
+  userId: number,
+  mod: SourceModule,
+  pickMax: number,
+): Promise<ModuleOutcome> {
+  if ((await countTodayOk(userId, mod.key)) >= MAX_OK_PER_DAY) {
     return { status: "skipped_guard" };
   }
 
   // 탐험형: 안 읽은 게 남아 있으면 쉰다. 읽으면 다음 회차에 새 걸 채운다 —
   // 아카이브에서 꺼내 오는 것이라 소식과 달리 미룬다고 없어지지 않는다.
-  if (mod.queueCap && (await countUnreadFor(mod.key)) >= mod.queueCap) {
+  if (mod.queueCap && (await countUnreadFor(userId, mod.key)) >= mod.queueCap) {
     return { status: "skipped_guard" };
   }
 
@@ -123,7 +132,7 @@ async function runModule(mod: SourceModule, pickMax: number): Promise<ModuleOutc
       continue;
     }
     try {
-      const items = await src.fetch();
+      const items = await src.fetch({ userId });
       collected.push(...items);
       sources[src.key] = `ok(${items.length})`;
     } catch (e) {
@@ -131,13 +140,13 @@ async function runModule(mod: SourceModule, pickMax: number): Promise<ModuleOutc
     }
   }
 
-  const fresh = await upsertAndGetNew(mod.key, collected);
+  const fresh = await upsertAndGetNew(userId, mod.key, collected);
   if (fresh.length === 0) return { status: "no_new", sources };
 
   // 탐험형에서 모델이 SKIP하면 뽑힌 문서를 "본 적 없음"으로 되돌린다.
   // 뉴스는 그 시간이 지나면 소용없지만, 유한한 풀에서 카드 없이 소모되는 건 손실이다.
   const skipAndForget = async (): Promise<ModuleOutcome> => {
-    if (mod.queueCap) await forgetItems(mod.key, fresh.map((f) => f.externalId));
+    if (mod.queueCap) await forgetItems(userId, mod.key, fresh.map((f) => f.externalId));
     return { status: "skipped_by_model", sources };
   };
 
@@ -146,12 +155,12 @@ async function runModule(mod: SourceModule, pickMax: number): Promise<ModuleOutc
   let threadNote: string | null = null;
 
   if (mod.render.mode === "llm") {
-    const recentlyRead = await getRecentlyRead(mod.key);
+    const recentlyRead = await getRecentlyRead(userId, mod.key);
     const result = await summarize(fresh, mod.render.prompt({ pickMax, recentlyRead }), mod.render.maxInput);
     if (result === SKIPPED) return skipAndForget();
     content = result.content;
     // LLM이 지어낸 번호를 그대로 FK로 넣지 않는다
-    if (result.threadOf !== null && (await briefingExists(result.threadOf, mod.key))) {
+    if (result.threadOf !== null && (await briefingExists(userId, result.threadOf, mod.key))) {
       threadOf = result.threadOf;
       threadNote = result.threadNote;
     }
@@ -189,6 +198,7 @@ async function runModule(mod: SourceModule, pickMax: number): Promise<ModuleOutc
   }
 
   const briefingId = await insertBriefing({
+    userId,
     moduleKey: mod.key,
     itemCount: shown.length,
     content,
@@ -199,7 +209,7 @@ async function runModule(mod: SourceModule, pickMax: number): Promise<ModuleOutc
   });
   // 실린 것만 장에 묶는다 — 떨어진 42건까지 묶으면 나중에 이어 붙이기가
   // "읽은 장에 있었다"고 착각한다
-  await linkItems(briefingId, mod.key, picked.map((it) => it.externalId));
+  await linkItems(userId, briefingId, mod.key, picked.map((it) => it.externalId));
 
   return { status: "ok", itemCount: shown.length, briefingId, threadOf, sources };
 }
@@ -215,10 +225,11 @@ function pickedItems(fresh: RawItem[], content: string): RawItem[] {
 }
 
 /** 같은 실패를 매시 새 행으로 쌓지 않는다 — 서 있는 실패는 하나면 된다 */
-async function recordFailure(moduleKey: string, message: string): Promise<void> {
-  const last = await lastBriefingState(moduleKey);
+async function recordFailure(userId: number, moduleKey: string, message: string): Promise<void> {
+  const last = await lastBriefingState(userId, moduleKey);
   if (last?.status === "failed" && last.error === message) return;
   await insertBriefing({
+    userId,
     moduleKey,
     itemCount: 0,
     content: null,
@@ -227,19 +238,20 @@ async function recordFailure(moduleKey: string, message: string): Promise<void> 
   }).catch(() => {});
 }
 
-async function maybeWrap(now: Date): Promise<RunResult["wrap"]> {
+async function maybeWrap(userId: number, now: Date): Promise<RunResult["wrap"]> {
   // 시계가 GitHub Actions라 정시에 안 돈다(5~20분 밀린다). 그래서 "18시 정각"이
   // 아니라 "18시대"로 본다.
   const kstHour = new Date(now.getTime() + 9 * 3_600_000).getUTCHours();
   if (kstHour !== WRAP_HOUR_KST) return "not_time";
-  if (await hasRecentWrap()) return "skipped";
+  if (await hasRecentWrap(userId)) return "skipped";
 
-  const read = await getTodayRead();
+  const read = await getTodayRead(userId);
   const contents = read.map((r) => r.content).filter((c): c is string => Boolean(c));
   const result = await summarizeDay(contents);
   if (result === SKIPPED) return "skipped";
 
   await insertBriefing({
+    userId,
     moduleKey: "wrap",
     kind: "wrap",
     itemCount: read.length,

@@ -20,6 +20,38 @@ export function requireSql() {
   return client;
 }
 
+// ── 유저 (07-30 완전 개인화) ───────────────────────────────────
+
+export interface User {
+  id: number;
+  username: string;
+  password_hash: string;
+}
+
+export async function getUserByUsername(username: string): Promise<User | null> {
+  const sql = requireSql();
+  const rows = (await sql`
+    select id, username, password_hash from users where username = ${username} limit 1`) as User[];
+  return rows[0] ?? null;
+}
+
+/** 가입. 아이디가 이미 있으면 unique 위반으로 던진다 — 호출자가 안내문으로 바꾼다 */
+export async function createUser(username: string, passwordHash: string): Promise<number> {
+  const sql = requireSql();
+  const rows = (await sql`
+    insert into users (username, password_hash)
+    values (${username}, ${passwordHash})
+    returning id`) as { id: number }[];
+  return rows[0].id;
+}
+
+/** 수집 워크플로가 유저별로 돌 때 쓰는 전체 목록 */
+export async function listUserIds(): Promise<number[]> {
+  const sql = requireSql();
+  const rows = (await sql`select id from users order by id`) as { id: number }[];
+  return rows.map((r) => r.id);
+}
+
 export type BriefingStatus = "ok" | "failed" | "skipped_empty";
 
 export interface Briefing {
@@ -43,14 +75,15 @@ export interface Briefing {
  * 큐 = 안 읽었고 아직 안 내려간 것 전부. 홈이 보여 주는 유일한 목록이다.
  * 개수는 정해져 있지 않다 — 한가한 날엔 0장, 바쁜 날엔 7장.
  */
-export async function getUnread(): Promise<Briefing[]> {
+export async function getUnread(userId: number): Promise<Briefing[]> {
   const sql = requireSql();
   const rows = await sql`
     select id, module_key, kind, item_count, content, status, error,
            est_read_seconds, thread_of, thread_note,
            read_at, archived_at, resurfaced_at, created_at
     from briefings
-    where status = 'ok' and read_at is null and archived_at is null
+    where user_id = ${userId}
+      and status = 'ok' and read_at is null and archived_at is null
     order by created_at desc`;
   return rows as Briefing[];
 }
@@ -72,27 +105,27 @@ export interface IndexEntry {
  * 재밌네" 싶은 순간이 별을 붙일 진짜 타이밍인데, 그때 설정으로 나가야 하면
  * 아무도 안 붙인다.
  */
-export async function setStar(key: string, starred: boolean): Promise<number> {
+export async function setStar(userId: number, key: string, starred: boolean): Promise<number> {
   const sql = requireSql();
 
   // 기본 상한은 별표 **안 한** 행에서 읽는다. 별표한 행은 이미 부풀려져 있어서
   // 그걸 기준으로 삼으면 누를 때마다 상한이 두 배씩 커진다.
   const baseRows = (await sql`
-    select pick_max from topics where enabled and not starred
+    select pick_max from topics where user_id = ${userId} and enabled and not starred
     union all
-    select pick_max from module_prefs where not muted and not starred
+    select pick_max from module_prefs where user_id = ${userId} and not muted and not starred
     limit 1`) as { pick_max: number }[];
   const base = baseRows[0]?.pick_max ?? 8;
   const max = starred ? starredPickMax(base) : base;
 
   const hit = (await sql`
     update topics set pick_max = ${max}, starred = ${starred}
-    where key = ${key} and enabled returning key`) as unknown[];
+    where user_id = ${userId} and key = ${key} and enabled returning key`) as unknown[];
 
   if (hit.length === 0) {
     await sql`
       update module_prefs set pick_max = ${max}, starred = ${starred}, updated_at = now()
-      where module_key = ${key}`;
+      where user_id = ${userId} and module_key = ${key}`;
   }
   return max;
 }
@@ -104,12 +137,13 @@ export async function setStar(key: string, starred: boolean): Promise<number> {
  * 되게 해 놓고 색인은 그대로 뒀더니, 큐에는 카드가 있는데 색인엔 그 항목이
  * 아예 없어서 숫자가 안 맞았다.
  */
-export async function getIndex(): Promise<IndexEntry[]> {
+export async function getIndex(userId: number): Promise<IndexEntry[]> {
   const sql = requireSql();
   const [counts, prefRows, topicRows] = await Promise.all([
-    getUnreadCountsByModule(),
-    sql`select module_key, muted, starred from module_prefs`,
-    sql`select key, label, starred from topics where enabled = true order by created_at`,
+    getUnreadCountsByModule(userId),
+    sql`select module_key, muted, starred from module_prefs where user_id = ${userId}`,
+    sql`select key, label, starred from topics
+        where user_id = ${userId} and enabled = true order by created_at`,
   ]);
   const prefs = prefRows as { module_key: string; muted: boolean; starred: boolean }[];
   const topics = topicRows as { key: string; label: string; starred: boolean }[];
@@ -149,12 +183,13 @@ const MODULE_LABELS = [
 ];
 
 /** 모듈·관심사별 안 읽은 장 수 */
-export async function getUnreadCountsByModule(): Promise<Record<string, number>> {
+export async function getUnreadCountsByModule(userId: number): Promise<Record<string, number>> {
   const sql = requireSql();
   const rows = (await sql`
     select module_key, count(*)::int as n
     from briefings
-    where status = 'ok' and read_at is null and archived_at is null
+    where user_id = ${userId}
+      and status = 'ok' and read_at is null and archived_at is null
     group by module_key`) as { module_key: string; n: number }[];
   return Object.fromEntries(rows.map((r) => [r.module_key, r.n]));
 }
@@ -166,14 +201,16 @@ export async function getUnreadCountsByModule(): Promise<Record<string, number>>
  * 다시 수집을 안 하니 성공으로 덮일 일도 없다(실측: 끈 지 오래된 game·travel이
  * FAIL 줄에 계속 떠 있었다).
  */
-export async function getStandingFailures(): Promise<{ module_key: string; error: string | null }[]> {
+export async function getStandingFailures(
+  userId: number,
+): Promise<{ module_key: string; error: string | null }[]> {
   const sql = requireSql();
   const rows = (await sql`
     select distinct on (module_key) module_key, status, error
     from briefings
-    where kind = 'live'
-      and module_key not in (select key from topics where enabled = false)
-      and module_key not in (select module_key from module_prefs where muted)
+    where user_id = ${userId} and kind = 'live'
+      and module_key not in (select key from topics where user_id = ${userId} and enabled = false)
+      and module_key not in (select module_key from module_prefs where user_id = ${userId} and muted)
     order by module_key, created_at desc`) as {
     module_key: string;
     status: string;
@@ -183,25 +220,30 @@ export async function getStandingFailures(): Promise<{ module_key: string; error
 }
 
 /** 모듈 하나의 지난 장들 — /c/[key] 아카이브 뷰 */
-export async function getModuleArchive(moduleKey: string, limit = 20): Promise<Briefing[]> {
+export async function getModuleArchive(
+  userId: number,
+  moduleKey: string,
+  limit = 20,
+): Promise<Briefing[]> {
   const sql = requireSql();
   const rows = await sql`
     select id, module_key, kind, item_count, content, status, error,
            est_read_seconds, thread_of, thread_note,
            read_at, archived_at, resurfaced_at, created_at
     from briefings
-    where module_key = ${moduleKey} and status = 'ok'
+    where user_id = ${userId} and module_key = ${moduleKey} and status = 'ok'
     order by created_at desc
     limit ${limit}`;
   return rows as Briefing[];
 }
 
-export async function markRead(id: number, read: boolean): Promise<void> {
+export async function markRead(userId: number, id: number, read: boolean): Promise<void> {
   const sql = requireSql();
+  // user_id 조건이 곧 권한 검사다 — 남의 장 id를 찍어도 아무 일도 안 일어난다
   if (read) {
-    await sql`update briefings set read_at = now() where id = ${id}`;
+    await sql`update briefings set read_at = now() where id = ${id} and user_id = ${userId}`;
   } else {
-    await sql`update briefings set read_at = null where id = ${id}`;
+    await sql`update briefings set read_at = null where id = ${id} and user_id = ${userId}`;
   }
 }
 
@@ -220,15 +262,15 @@ export interface SkipNudge {
 }
 
 /** "이 모듈, 줄일까요?" 후보. 한 번 답하면 2주 동안 다시 안 묻는다. */
-export async function getSkipNudge(): Promise<SkipNudge | null> {
+export async function getSkipNudge(userId: number): Promise<SkipNudge | null> {
   const sql = requireSql();
   const rows = (await sql`
     select b.module_key,
            count(*) filter (where b.read_at is null)::int as skipped,
            count(*)::int as total
     from briefings b
-    left join module_prefs p on p.module_key = b.module_key
-    where b.kind = 'live' and b.status = 'ok'
+    left join module_prefs p on p.module_key = b.module_key and p.user_id = b.user_id
+    where b.user_id = ${userId} and b.kind = 'live' and b.status = 'ok'
       and b.archived_at is not null
       and b.created_at > now() - interval '14 days'
       and (p.nudged_at is null or p.nudged_at < now() - interval '14 days')
@@ -261,12 +303,13 @@ export interface CurrentSetup {
 
 
 /** 설정 화면이 지금 상태를 그대로 띄우려고 읽는다 */
-export async function getCurrentSetup(): Promise<CurrentSetup> {
+export async function getCurrentSetup(userId: number): Promise<CurrentSetup> {
   const sql = requireSql();
   const [prefRows, topicRows] = await Promise.all([
-    sql`select module_key, muted, pick_max, starred from module_prefs`,
+    sql`select module_key, muted, pick_max, starred from module_prefs where user_id = ${userId}`,
     // 꺼진 것도 가져온다 — 직접 추가한 관심사를 다시 켜려면 목록에 있어야 한다
-    sql`select key, label, custom, pick_max, starred, enabled from topics order by created_at`,
+    sql`select key, label, custom, pick_max, starred, enabled from topics
+        where user_id = ${userId} order by created_at`,
   ]);
   const prefs = prefRows as {
     module_key: string;
@@ -325,57 +368,68 @@ export interface SetupTopic {
  * 관심사 하나를 켜거나 끈다. 대화창에서 "주식은 빼줘" 같은 말이 오는 경로다.
  * 끄면 그 관심사의 안 읽은 카드도 큐에서 내린다 — 설정 화면과 같은 규칙이다.
  */
-export async function setTopicEnabled(key: string, enabled: boolean): Promise<boolean> {
+export async function setTopicEnabled(
+  userId: number,
+  key: string,
+  enabled: boolean,
+): Promise<boolean> {
   const sql = requireSql();
   const hit = (await sql`
-    update topics set enabled = ${enabled} where key = ${key} returning key`) as unknown[];
+    update topics set enabled = ${enabled}
+    where user_id = ${userId} and key = ${key} returning key`) as unknown[];
 
   if (hit.length === 0) {
     const m = (await sql`
       update module_prefs set muted = ${!enabled}, updated_at = now()
-      where module_key = ${key} returning module_key`) as unknown[];
+      where user_id = ${userId} and module_key = ${key} returning module_key`) as unknown[];
     if (m.length === 0) return false;
   }
 
   if (!enabled) {
     await sql`
       update briefings set archived_at = now()
-      where module_key = ${key} and kind = 'live'
+      where user_id = ${userId} and module_key = ${key} and kind = 'live'
         and read_at is null and archived_at is null`;
   }
   return true;
 }
 
 /** 관심사를 새로 만든다. 대화창에서 "인디게임도 추가해줘" 하면 여기로 온다 */
-export async function addTopic(key: string, label: string, query: string): Promise<void> {
+export async function addTopic(
+  userId: number,
+  key: string,
+  label: string,
+  query: string,
+): Promise<void> {
   const sql = requireSql();
-  const base = await currentBase();
+  const base = await currentBase(userId);
   await sql`
-    insert into topics (key, label, query, custom, pick_max, starred, enabled)
-    values (${key}, ${label}, ${query}, true, ${base}, false, true)
-    on conflict (key) do update
+    insert into topics (user_id, key, label, query, custom, pick_max, starred, enabled)
+    values (${userId}, ${key}, ${label}, ${query}, true, ${base}, false, true)
+    on conflict (user_id, key) do update
       set label = excluded.label, query = excluded.query, enabled = true`;
 }
 
 /** 지금 쓰는 기본 상한 — 별표 안 한 행에서 읽는다 */
-async function currentBase(): Promise<number> {
+async function currentBase(userId: number): Promise<number> {
   const sql = requireSql();
   const rows = (await sql`
-    select pick_max from topics where enabled and not starred
+    select pick_max from topics where user_id = ${userId} and enabled and not starred
     union all
-    select pick_max from module_prefs where not muted and not starred
+    select pick_max from module_prefs where user_id = ${userId} and not muted and not starred
     limit 1`) as { pick_max: number }[];
   return rows[0]?.pick_max ?? 8;
 }
 
 /** 대화창이 "지금 뭘 받고 있나"를 알아야 켜고 끄고 별표를 시킬 수 있다 */
-export async function listTopicsForChat(): Promise<
+export async function listTopicsForChat(userId: number): Promise<
   { key: string; label: string; enabled: boolean; starred: boolean }[]
 > {
   const sql = requireSql();
   const [t, m] = await Promise.all([
-    sql`select key, label, enabled, starred from topics order by created_at`,
-    sql`select module_key, muted, starred from module_prefs`,
+    sql`select key, label, enabled, starred from topics
+        where user_id = ${userId} order by created_at`,
+    sql`select module_key, muted, starred from module_prefs where user_id = ${userId}`,
   ]);
   const topics = t as { key: string; label: string; enabled: boolean; starred: boolean }[];
   const prefs = m as { module_key: string; muted: boolean; starred: boolean }[];
@@ -406,14 +460,17 @@ export interface ChatStatus {
  * 이게 없으면 자기 앱 얘긴데 "난 앱 내부 동작을 확인할 수 없다"고 밀어낸다.
  * 실제로 그렇게 답하는 걸 보고 붙였다.
  */
-export async function getChatStatus(): Promise<ChatStatus> {
+export async function getChatStatus(userId: number): Promise<ChatStatus> {
   const sql = requireSql();
   const [c, q, cards, fresh] = await Promise.all([
-    sql`select max(collected_at) as at from source_items`,
-    sql`select count(*)::int as n from briefings where read_at is null and archived_at is null`,
+    sql`select max(collected_at) as at from source_items where user_id = ${userId}`,
+    sql`select count(*)::int as n from briefings
+        where user_id = ${userId} and read_at is null and archived_at is null`,
     sql`select distinct on (module_key) module_key, created_at as at
-        from briefings where kind = 'live' order by module_key, created_at desc`,
-    sql`select count(*)::int as n from source_items where collected_at > now() - interval '2 hours'`,
+        from briefings where user_id = ${userId} and kind = 'live'
+        order by module_key, created_at desc`,
+    sql`select count(*)::int as n from source_items
+        where user_id = ${userId} and collected_at > now() - interval '2 hours'`,
   ]);
   return {
     lastCollectedAt: (c as { at: string | null }[])[0]?.at ?? null,
@@ -424,23 +481,24 @@ export async function getChatStatus(): Promise<ChatStatus> {
 }
 
 /** 카드 하나 — 대화의 바탕이 된다 */
-export async function getBriefing(id: number): Promise<Briefing | null> {
+export async function getBriefing(userId: number, id: number): Promise<Briefing | null> {
   const sql = requireSql();
   const rows = (await sql`
     select id, module_key, kind, item_count, content, status, error,
            est_read_seconds, thread_of, thread_note,
            read_at, archived_at, resurfaced_at, created_at
-    from briefings where id = ${id} limit 1`) as Briefing[];
+    from briefings where id = ${id} and user_id = ${userId} limit 1`) as Briefing[];
   return rows[0] ?? null;
 }
 
 /** 관심사를 완전히 지운다 — 직접 추가한 것만. 프리셋은 끄기만 한다 */
-export async function deleteTopic(key: string): Promise<void> {
+export async function deleteTopic(userId: number, key: string): Promise<void> {
   const sql = requireSql();
-  await sql`delete from topics where key = ${key} and custom = true`;
+  await sql`delete from topics where user_id = ${userId} and key = ${key} and custom = true`;
 }
 
 export async function applySetup(
+  userId: number,
   pickedModules: string[],
   topics: SetupTopic[],
   pickMax: number,
@@ -456,12 +514,12 @@ export async function applySetup(
   const maxes = keys.map(maxFor);
   const stars = keys.map((k) => star.has(k));
   await sql`
-    insert into module_prefs (module_key, pick_max, muted, starred, updated_at)
-    select k, m, mu, st, now()
+    insert into module_prefs (user_id, module_key, pick_max, muted, starred, updated_at)
+    select ${userId}, k, m, mu, st, now()
     from unnest(
       ${keys}::text[], ${maxes}::int[], ${muted}::boolean[], ${stars}::boolean[]
     ) as x(k, m, mu, st)
-    on conflict (module_key) do update
+    on conflict (user_id, module_key) do update
       set pick_max = excluded.pick_max,
           muted = excluded.muted,
           starred = excluded.starred,
@@ -470,19 +528,21 @@ export async function applySetup(
   // 검색 관심사. 목록에 없는 건 끈다 — **지우지 않는다.** 지우면 이미 본 기사
   // 기록(source_items)과의 연결이 흐려지고, 직접 추가한 것은 다시 켤 수도 없다.
   const all = topics.map((t) => t.key);
-  await sql`update topics set enabled = false where key <> all(${all}::text[])`;
+  await sql`
+    update topics set enabled = false
+    where user_id = ${userId} and key <> all(${all}::text[])`;
 
   if (topics.length > 0) {
     await sql`
-      insert into topics (key, label, query, custom, pick_max, starred, enabled)
-      select k, l, q, c, m, st, en
+      insert into topics (user_id, key, label, query, custom, pick_max, starred, enabled)
+      select ${userId}, k, l, q, c, m, st, en
       from unnest(
         ${all}::text[], ${topics.map((t) => t.label)}::text[],
         ${topics.map((t) => t.query)}::text[], ${topics.map((t) => t.custom)}::boolean[],
         ${topics.map((t) => maxFor(t.key))}::int[], ${topics.map((t) => star.has(t.key))}::boolean[],
         ${topics.map((t) => t.enabled)}::boolean[]
       ) as x(k, l, q, c, m, st, en)
-      on conflict (key) do update
+      on conflict (user_id, key) do update
         set label = excluded.label,
             query = excluded.query,
             pick_max = excluded.pick_max,
@@ -499,7 +559,8 @@ export async function applySetup(
   const live = [...pickedModules, ...topics.filter((t) => t.enabled).map((t) => t.key)];
   await sql`
     update briefings set archived_at = now()
-    where kind = 'live' and read_at is null and archived_at is null
+    where user_id = ${userId}
+      and kind = 'live' and read_at is null and archived_at is null
       and module_key <> all(${live}::text[])`;
 }
 
@@ -508,6 +569,7 @@ const MODULE_KEYS = ["hotdeal", "market", "technews", "community", "steamgame", 
 
 /** 답을 받았다. 줄이거나, 아예 끄거나, 그대로 두거나. */
 export async function answerNudge(
+  userId: number,
   moduleKey: string,
   answer: "reduce" | "mute" | "keep",
 ): Promise<void> {
@@ -515,9 +577,9 @@ export async function answerNudge(
   const pickMax = answer === "reduce" ? 3 : 8;
   const muted = answer === "mute";
   await sql`
-    insert into module_prefs (module_key, pick_max, muted, nudged_at, updated_at)
-    values (${moduleKey}, ${pickMax}, ${muted}, now(), now())
-    on conflict (module_key) do update
+    insert into module_prefs (user_id, module_key, pick_max, muted, nudged_at, updated_at)
+    values (${userId}, ${moduleKey}, ${pickMax}, ${muted}, now(), now())
+    on conflict (user_id, module_key) do update
       set pick_max = excluded.pick_max,
           muted = excluded.muted,
           nudged_at = now(),

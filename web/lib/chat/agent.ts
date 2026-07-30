@@ -246,11 +246,15 @@ function buildContext(
   return lines.join("\n");
 }
 
-export async function runChat(turns: ChatTurn[], cardId?: number): Promise<ChatResult> {
+export async function runChat(
+  userId: number,
+  turns: ChatTurn[],
+  cardId?: number,
+): Promise<ChatResult> {
   const [card, topics, status] = await Promise.all([
-    cardId ? getBriefing(cardId) : Promise.resolve(null),
-    listTopicsForChat(),
-    getChatStatus(),
+    cardId ? getBriefing(userId, cardId) : Promise.resolve(null),
+    listTopicsForChat(userId),
+    getChatStatus(userId),
   ]);
   const urls = allowedUrls(card);
 
@@ -290,7 +294,7 @@ export async function runChat(turns: ChatTurn[], cardId?: number): Promise<ChatR
     const results: Anthropic.ToolResultBlockParam[] = [];
     for (const block of res.content) {
       if (block.type !== "tool_use") continue;
-      const { out, note } = await runTool(block.name, block.input as Record<string, unknown>, urls);
+      const { out, note } = await runTool(userId, block.name, block.input as Record<string, unknown>, urls);
       if (note) actions.push(note);
       results.push({ type: "tool_result", tool_use_id: block.id, content: out });
     }
@@ -301,6 +305,7 @@ export async function runChat(turns: ChatTurn[], cardId?: number): Promise<ChatR
 }
 
 async function runTool(
+  userId: number,
   name: string,
   input: Record<string, unknown>,
   urls: Set<string>,
@@ -326,7 +331,7 @@ async function runTool(
         const query = String(input.query ?? "").trim().slice(0, 120) || label;
         if (!label) return { out: "이름이 비었습니다." };
         const key = customKey(label);
-        await addTopic(key, label, query);
+        await addTopic(userId, key, label, query);
         return {
           out: `추가했습니다. key=${key}, 검색어="${query}". 다음 수집부터 쌓입니다.`,
           note: { ok: true, text: `관심사 추가: ${label} (검색어 "${query}")` },
@@ -335,7 +340,7 @@ async function runTool(
       case "set_topic_enabled": {
         const key = String(input.key ?? "");
         const enabled = input.enabled !== false;
-        const ok = await setTopicEnabled(key, enabled);
+        const ok = await setTopicEnabled(userId, key, enabled);
         if (!ok) return { out: `${key}라는 관심사를 못 찾았습니다.` };
         return {
           out: `${enabled ? "켰습니다" : "껐습니다"}.`,
@@ -345,7 +350,7 @@ async function runTool(
       case "star_topic": {
         const key = String(input.key ?? "");
         const starred = input.starred !== false;
-        const max = await setStar(key, starred);
+        const max = await setStar(userId, key, starred);
         return {
           out: starred ? `별표를 붙였습니다. 이제 한 장에 최대 ${max}개까지 받습니다.` : "별표를 뗐습니다.",
           note: { ok: true, text: `${key} 별표 ${starred ? "붙임" : "뗌"}` },

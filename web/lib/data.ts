@@ -36,17 +36,17 @@ function demoIndex(): IndexEntry[] {
   }));
 }
 
-export async function getQueueView(): Promise<QueueView> {
+export async function getQueueView(userId: number): Promise<QueueView> {
   if (!hasDb) {
     return { queue: DEMO_QUEUE, index: demoIndex(), failures: [], nudge: null, demo: true };
   }
 
   // 넷 다 서로 독립이라 같이 던진다
   const [queue, index, failures, nudge] = await Promise.all([
-    getUnread(),
-    getIndex(),
-    getStandingFailures(),
-    getSkipNudge(),
+    getUnread(userId),
+    getIndex(userId),
+    getStandingFailures(userId),
+    getSkipNudge(userId),
   ]);
   return { queue, index, failures, nudge, demo: false };
 }
@@ -58,11 +58,14 @@ export interface ArchiveView {
 }
 
 /** 모듈 하나의 지난 장들 — 읽은 것도 포함한다(그게 아카이브의 용도다) */
-export async function getArchiveView(moduleKey: string): Promise<ArchiveView> {
+export async function getArchiveView(userId: number, moduleKey: string): Promise<ArchiveView> {
   if (!hasDb) {
     const briefings = DEMO_QUEUE.filter((b) => b.module_key === moduleKey);
     return { briefings, index: demoIndex(), demo: true };
   }
-  const [briefings, index] = await Promise.all([getModuleArchive(moduleKey), getIndex()]);
+  const [briefings, index] = await Promise.all([
+    getModuleArchive(userId, moduleKey),
+    getIndex(userId),
+  ]);
   return { briefings, index, demo: false };
 }

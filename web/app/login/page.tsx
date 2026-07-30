@@ -24,11 +24,10 @@ function ArrivalSweep() {
 }
 
 /**
- * 로그인 — 이름과 비밀번호.
+ * 로그인/가입 — 아이디와 비밀번호 (07-30 완전 개인화).
  *
- * 이름은 인사말용이라 브라우저에만 남고, 비밀번호는 서버가 확인해 쿠키를 준다.
- * 예전엔 이름만 받는 연출용 게이트였는데, 읽음 표시가 서버 상태를 바꾸게 되면서
- * 실제 자물쇠가 필요해졌다. APP_PASSWORD를 안 걸어 두면 비밀번호는 그냥 통과한다.
+ * 이제 아이디가 서버의 계정이다(예전엔 인사말용으로 브라우저에만 남았다).
+ * 가입은 초대코드가 있어야 열린다 — 지인 소수 초대제라 이메일이 없다.
  */
 function LoginInner() {
   const router = useRouter();
@@ -36,6 +35,8 @@ function LoginInner() {
   const controls = useAnimationControls();
   const [name, setName] = useState("");
   const [password, setPassword] = useState("");
+  const [invite, setInvite] = useState("");
+  const [signup, setSignup] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [leaving, setLeaving] = useState(false);
@@ -48,7 +49,7 @@ function LoginInner() {
     if (leaving || busy) return;
     const trimmed = name.trim();
     if (!trimmed) {
-      setError("이름을 적어주세요.");
+      setError("아이디를 적어주세요.");
       shake();
       return;
     }
@@ -58,12 +59,17 @@ function LoginInner() {
     const res = await fetch("/api/login", {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ password }),
+      body: JSON.stringify(
+        signup
+          ? { mode: "signup", username: trimmed, password, invite }
+          : { username: trimmed, password },
+      ),
     }).catch(() => null);
     setBusy(false);
 
     if (!res?.ok) {
-      setError(res?.status === 401 ? "비밀번호가 다릅니다." : "지금은 열 수 없습니다.");
+      const msg = (await res?.json().catch(() => null))?.error;
+      setError(msg ?? "지금은 열 수 없습니다.");
       shake();
       return;
     }
@@ -110,15 +116,18 @@ function LoginInner() {
           <form onSubmit={submit}>
             {[
               <h1 key="t" className="login-title">
-                서류철 열기
+                {signup ? "새 서류철 만들기" : "서류철 열기"}
               </h1>,
               <p key="s" className="login-sub">
-                이름은 인사말에만 쓰이고 이 브라우저에 남습니다.
+                {signup
+                  ? "초대코드가 있어야 합니다. 관심사는 만든 뒤에 고릅니다."
+                  : "각자의 서류철은 각자의 아이디로 열립니다."}
               </p>,
               <input
                 key="i"
                 className="input"
-                placeholder="이름 또는 별명"
+                placeholder="아이디"
+                autoComplete="username"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 autoFocus
@@ -128,12 +137,23 @@ function LoginInner() {
                 className="input"
                 type="password"
                 placeholder="비밀번호"
-                autoComplete="current-password"
+                autoComplete={signup ? "new-password" : "current-password"}
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
               />,
+              ...(signup
+                ? [
+                    <input
+                      key="v"
+                      className="input"
+                      placeholder="초대코드"
+                      value={invite}
+                      onChange={(e) => setInvite(e.target.value)}
+                    />,
+                  ]
+                : []),
               <button key="b" type="submit" className="btn-primary wide" disabled={busy}>
-                {busy ? "여는 중…" : "열기"}
+                {busy ? "여는 중…" : signup ? "만들기" : "열기"}
               </button>,
             ].map((el, i) => (
               <motion.div
@@ -147,6 +167,16 @@ function LoginInner() {
             ))}
           </form>
           {error && <p className="login-error">{error}</p>}
+          <button
+            type="button"
+            className="login-toggle"
+            onClick={() => {
+              setSignup((s) => !s);
+              setError(null);
+            }}
+          >
+            {signup ? "이미 서류철이 있어요 → 열기" : "처음이에요 → 초대코드로 만들기"}
+          </button>
         </motion.div>
       </motion.div>
     </main>

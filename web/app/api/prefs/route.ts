@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { answerNudge, hasDb } from "@/lib/db";
+import { requireUserId } from "@/lib/session-server";
 
 export const runtime = "nodejs";
 
@@ -16,6 +17,8 @@ export async function POST(req: Request) {
   }
   if (!hasDb) return NextResponse.json({ ok: true, persisted: false });
 
-  await answerNudge(moduleKey, answer as Answer);
+  const userId = await requireUserId();
+  if (userId === null) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+  await answerNudge(userId, moduleKey, answer as Answer);
   return NextResponse.json({ ok: true, persisted: true });
 }

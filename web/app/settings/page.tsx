@@ -1,4 +1,6 @@
+import { redirect } from "next/navigation";
 import { hasDb, getCurrentSetup, getIndex, type CurrentSetup } from "@/lib/db";
+import { currentUserId } from "@/lib/session-server";
 import { MODULE_ORDER } from "@/lib/modules";
 import { Settings } from "@/components/folders/Settings";
 
@@ -15,6 +17,8 @@ const DEMO: CurrentSetup = {
 export default async function SettingsPage() {
   if (!hasDb) return <Settings current={DEMO} index={[]} demo />;
 
-  const [current, index] = await Promise.all([getCurrentSetup(), getIndex()]);
+  const userId = await currentUserId();
+  if (userId === null) redirect("/onboarding");
+  const [current, index] = await Promise.all([getCurrentSetup(userId), getIndex(userId)]);
   return <Settings current={current} index={index} demo={false} />;
 }

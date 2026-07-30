@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { hasDb, markRead } from "@/lib/db";
+import { requireUserId } from "@/lib/session-server";
 
 export const runtime = "nodejs";
 
@@ -14,6 +15,8 @@ export async function POST(req: Request) {
   // 화면은 어차피 이번 세션 동안만 읽음으로 보인다.
   if (!hasDb) return NextResponse.json({ ok: true, persisted: false });
 
-  await markRead(id, body.read !== false);
+  const userId = await requireUserId();
+  if (userId === null) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+  await markRead(userId, id, body.read !== false);
   return NextResponse.json({ ok: true, persisted: true });
 }

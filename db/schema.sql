@@ -7,6 +7,20 @@
 -- 큐에 있다/없다를 정하는 건 이 컬럼과 archived_at 둘뿐이다.
 
 -- ─────────────────────────────────────────────────────────────
+-- users — 완전 개인화(07-30). 초대코드(env INVITE_CODE)로만 가입.
+--
+-- password_hash는 scrypt(node:crypto) `salt:hash` hex — 코드가 만든다.
+-- user_id에 FK를 안 건 이유: 기존 행 default 1과 생성 순서가 꼬인다.
+-- 개인 도구라 참조 무결성은 코드가 지키는 걸로 충분하다.
+-- ─────────────────────────────────────────────────────────────
+create table if not exists users (
+  id            bigint generated always as identity primary key,
+  username      text not null unique,
+  password_hash text not null,
+  created_at    timestamptz not null default now()
+);
+
+-- ─────────────────────────────────────────────────────────────
 -- briefings — 종이 한 장. 한 회차 수집에서 한 모듈이 건진 것 묶음.
 -- ─────────────────────────────────────────────────────────────
 create table if not exists briefings (
@@ -37,10 +51,8 @@ create table if not exists briefings (
   created_at   timestamptz not null default now()
 );
 
--- 큐 조회 전용 부분 인덱스 — 홈이 매번 때리는 유일한 쿼리다
-create index if not exists briefings_queue_idx
-  on briefings (created_at desc)
-  where status = 'ok' and read_at is null and archived_at is null;
+-- 큐 조회 전용 부분 인덱스는 user_id가 생기며 briefings_user_queue_idx로
+-- 바뀌었다 — 아래 "완전 개인화" 블록에 있다.
 
 create index if not exists briefings_module_created_idx
   on briefings (module_key, created_at desc);
@@ -103,6 +115,57 @@ create table if not exists topics (
 );
 
 create index if not exists topics_enabled_idx on topics (enabled);
+
+-- ─────────────────────────────────────────────────────────────
+-- 넌센스 퀴즈 (07-30). 문제은행은 전역, 기록은 사람별.
+--
+-- 한 문제는 한 번 맞히면 끝 — (user_id, question_id)가 PK인 이유.
+-- 오답은 기록하지 않는다(재도전 자유). 포기('gaveup')만 남겨서
+-- 같은 문제가 다시 안 나오게 한다.
+-- ─────────────────────────────────────────────────────────────
+create table if not exists quiz_questions (
+  id         bigint generated always as identity primary key,
+  question   text not null unique,
+  answer     text not null,
+  alts       text[] not null default '{}',  -- 이것도 정답으로 쳐 주는 표기들
+  created_at timestamptz not null default now()
+);
+
+create table if not exists quiz_attempts (
+  user_id     bigint not null,
+  question_id bigint not null references quiz_questions(id) on delete cascade,
+  result      text not null,                -- 'correct' | 'gaveup'
+  created_at  timestamptz not null default now(),
+  primary key (user_id, question_id)
+);
+
+-- ─────────────────────────────────────────────────────────────
+-- 완전 개인화(07-30) — 네 테이블 전부 user_id 축 추가.
+--
+-- default 1 = 마이그레이션 장치: 기존 행 전부가 1번 유저(원 사용자) 것이 된다.
+-- 새 코드는 항상 user_id를 명시하므로 default에 기대는 경로는 없어야 한다.
+-- PK 재구성은 "drop → add"라 재실행해도 같은 상태로 끝난다.
+-- ─────────────────────────────────────────────────────────────
+alter table briefings    add column if not exists user_id bigint not null default 1;
+alter table source_items add column if not exists user_id bigint not null default 1;
+alter table module_prefs add column if not exists user_id bigint not null default 1;
+alter table topics       add column if not exists user_id bigint not null default 1;
+
+alter table topics drop constraint if exists topics_pkey;
+alter table topics add primary key (user_id, key);
+
+alter table module_prefs drop constraint if exists module_prefs_pkey;
+alter table module_prefs add primary key (user_id, module_key);
+
+-- 중복제거 유니크도 사람별로 — "내가 본 것"과 "네가 본 것"은 다른 집합이다
+alter table source_items drop constraint if exists source_items_module_key_external_id_key;
+create unique index if not exists source_items_user_module_ext_idx
+  on source_items (user_id, module_key, external_id);
+
+drop index if exists briefings_queue_idx;
+create index if not exists briefings_user_queue_idx
+  on briefings (user_id, created_at desc)
+  where status = 'ok' and read_at is null and archived_at is null;
 
 -- ─────────────────────────────────────────────────────────────
 -- 기존 DB에 컬럼만 얹을 때를 위한 보정 (이미 있으면 무시됨)
