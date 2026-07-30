@@ -17,6 +17,7 @@ import {
   countTodayOk,
   countUnread,
   countUnreadFor,
+  forgetItems,
   getEnabledTopics,
   getPrefs,
   getRecentlyRead,
@@ -133,6 +134,13 @@ async function runModule(mod: SourceModule, pickMax: number): Promise<ModuleOutc
   const fresh = await upsertAndGetNew(mod.key, collected);
   if (fresh.length === 0) return { status: "no_new", sources };
 
+  // 탐험형에서 모델이 SKIP하면 뽑힌 문서를 "본 적 없음"으로 되돌린다.
+  // 뉴스는 그 시간이 지나면 소용없지만, 유한한 풀에서 카드 없이 소모되는 건 손실이다.
+  const skipAndForget = async (): Promise<ModuleOutcome> => {
+    if (mod.queueCap) await forgetItems(mod.key, fresh.map((f) => f.externalId));
+    return { status: "skipped_by_model", sources };
+  };
+
   let content: string;
   let threadOf: number | null = null;
   let threadNote: string | null = null;
@@ -140,7 +148,7 @@ async function runModule(mod: SourceModule, pickMax: number): Promise<ModuleOutc
   if (mod.render.mode === "llm") {
     const recentlyRead = await getRecentlyRead(mod.key);
     const result = await summarize(fresh, mod.render.prompt({ pickMax, recentlyRead }), mod.render.maxInput);
-    if (result === SKIPPED) return { status: "skipped_by_model", sources };
+    if (result === SKIPPED) return skipAndForget();
     content = result.content;
     // LLM이 지어낸 번호를 그대로 FK로 넣지 않는다
     if (result.threadOf !== null && (await briefingExists(result.threadOf, mod.key))) {
@@ -151,11 +159,11 @@ async function runModule(mod: SourceModule, pickMax: number): Promise<ModuleOutc
     content = mod.render.format(fresh);
   }
 
-  if (!content.trim()) return { status: "skipped_by_model", sources };
+  if (!content.trim()) return skipAndForget();
 
   // 사고 과정·프롬프트 해설이 본문으로 들어온 경우(07-28 실측). summarize에서
   // 한 번 걸러도, format 경로를 위해 여기서 한 번 더 막는다.
-  if (isThinkingLeak(content)) return { status: "skipped_by_model", sources };
+  if (isThinkingLeak(content)) return skipAndForget();
 
   // 50건을 훑고 8건을 실었으면 이 장은 8건짜리다. 화면의 "N ITEMS"와
   // "+N MORE"가 이 숫자를 쓰므로, 훑은 수를 넣으면 카드가 거짓말을 한다.
@@ -170,7 +178,7 @@ async function runModule(mod: SourceModule, pickMax: number): Promise<ModuleOutc
   // (실측: 신규가 학원 광고 한 건뿐이던 회차에 항목 0개짜리 카드가 생겼다).
   // 큐에 올라온 이상 읽어야 할 것처럼 보이는데 열면 아무것도 없다 — 없으면
   // 아무것도 안 쌓는다는 원칙이 여기서도 같아야 한다.
-  if (shown.length === 0) return { status: "skipped_by_model", sources };
+  if (shown.length === 0) return skipAndForget();
 
   const picked = pickedItems(fresh, content);
 

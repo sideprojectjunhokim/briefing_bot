@@ -163,6 +163,22 @@ export async function filterUnseen(moduleKey: string, externalIds: string[]): Pr
   return externalIds.filter((id) => !seen.has(id));
 }
 
+/**
+ * 아이템을 "본 적 없음"으로 되돌린다 — 탐험형 전용.
+ *
+ * 모델이 변덕으로 SKIP하면 그 회차에 뽑힌 문서가 카드 없이 "봤음"으로 남아
+ * 풀에서 영영 빠진다(실측: level-965, 5천 자짜리 정상 문서). 뉴스는 그 시간이
+ * 지나면 어차피 소용없지만 탐험형 풀은 유한하다 — 되돌려서 다음 기회를 준다.
+ */
+export async function forgetItems(moduleKey: string, externalIds: string[]): Promise<void> {
+  if (externalIds.length === 0) return;
+  const sql = requireSql();
+  await sql`
+    delete from source_items
+    where module_key = ${moduleKey} and external_id = any(${externalIds}::text[])
+      and briefing_id is null`;
+}
+
 /** 이 모듈의 안 읽은 장 수 — 탐험형 모듈의 리필 판단(queueCap)에 쓴다 */
 export async function countUnreadFor(moduleKey: string): Promise<number> {
   const sql = requireSql();
